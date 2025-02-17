@@ -1,0 +1,14 @@
+numpy==1.26.4
+matplotlib
+scikit-learn
+tiffile
+Pillow
+scipy
+scikit-image
+rasterio
+pyproj
+pandas
+shapely
+geopandas
+networkx
+python_louvain
