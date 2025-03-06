@@ -1,0 +1,1 @@
+Estar is a package created to allow everyone to use our method of constraining Habitat Suitability maps using occurences and information integration via Permanence of Ratios ! (the code is built under Python 3.10.9)
