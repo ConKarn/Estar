@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='Estar',  # The name of your package
-    version='1.3.5',  # The version of your package
+    version='1.4.1',  # The version of your package
     packages=find_packages(),  # Automatically finds all the submodules
     install_requires=[  # List any external dependencies
         'numpy==1.26.4',        # Example dependencies

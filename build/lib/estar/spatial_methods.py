@@ -257,9 +257,7 @@ def LRmap(Obs, HS):
     return result
 
 
-def PseudoRange(SubRegions,Obs,Obstaxa,plot=False):
-    
-    
+def PseudoRange(SubRegions,Obs,Obstaxa,plot=False,NanMap=None):
     
     totobs_sp = np.nansum(Obs) # total obs sp
     iD_occupied_subregions = np.unique(SubRegions[Obs==1]) # iD of occupied subregions
@@ -301,10 +299,18 @@ def PseudoRange(SubRegions,Obs,Obstaxa,plot=False):
             pseudo_range[mask_subregion]= coverage*obs_anomaly
         else:
             pass
-    Totsu=threshold_otsu(pseudo_range.flatten())
+    
+    #keep only places >0 to coompute Totsu
+    maskposit = pseudo_range>0
+    # add .astype() to prevent problem later (can therefore be considered as an int16 if not enforcing float64)
+    Totsu= (threshold_otsu(pseudo_range[maskposit].flatten())).astype("float64")
     # create a plateau effect
+    print("T_otsu = ",Totsu)
     pseudo_range[pseudo_range>Totsu]=Totsu
-    pseudo_range /= np.nanmax(pseudo_range)
+    
+    # avoid problem here in divide by enforcing float to Totsu
+    pseudo_range = pseudo_range.astype("float64")
+    pseudo_range /= np.nanmax(pseudo_range) 
 
     if plot==True:
         plt.figure(figsize=(10,10))
@@ -312,9 +318,10 @@ def PseudoRange(SubRegions,Obs,Obstaxa,plot=False):
         plt.imshow(pseudo_range)
         plt.colorbar(shrink=0.6)
         plt.grid(linestyle="--",color="grey",linewidth=0.2)
-        #plt.show(block=False)
+        plt.show(block=False)
     
     return pseudo_range
+
 
 def Sm_Iucn(Iucn,nanmap = None,sig=50):
     
@@ -1148,7 +1155,7 @@ def CurrRange(Obs,RefRange,HS,IucnDistSmooth,plot=False,sizecoeff=10,NanMap=None
 
 
 
-def runoverfile(hsfolder,obsfolder,obstaxafile,sig=30,subregionfile=None,RefRangeDistSmooth=50,WE=0.7,Wdens=0.7,bydeclust=40,typerange = "PseudoRange",NaNvalue=None,savefigfolder=None,outputtype="CR",plot=False,Ksig=None,bynx=10,comp1percent=50,maxpoints=1000,HStreatment="nanmin",KDE_mode="ClassicKDE + Declustering",birdmode=True,listnamesformat=[]):
+def runoverfile(hsfolder,obsfolder,obstaxafile,sig=30,subregionfile=None,RefRangeDistSmooth=50,WE=0.7,Wdens=0.7,bydeclust=40,typerange = "PseudoRange",NaNvalue=None,savefigfolder=None,outputtype="CR",plot=False,Ksig=None,bynx=10,comp1percent=50,maxpoints=10000,HStreatment="nanmin",KDE_mode="ClassicKDE + Declustering",birdmode=True,listnamesformat=[],listvalidHSnames=[]):
     
     """
 
@@ -1188,11 +1195,16 @@ def runoverfile(hsfolder,obsfolder,obstaxafile,sig=30,subregionfile=None,RefRang
         > "Binary Boyce": a trinary output (values of 0 , 0.5 and 1), using method from Hizel et al
         > "Binary Otsu": a binary output using Otsu thresholding based on predicted values at occurences points.
         > "Cut50": a binary output with a threshold of 0.5.
+        >"CR + BinaryBoyce" both continuous and binary maps using Boyce Index are computed
+        >"CR + Cut50" both continuous and binary maps using the threshold 0.5 are computed
 
         plot (bool) (default =False): if plot is True, plot everything for a diagnosis of th entire process.
 
-        listnamesformat (list), [Obsformet,HSformat] , example: if all files in the Observation folder are in the form Obs_speciesname_1kmresolution.tif and HS_speciesname_1kmresolution.tif for files in HS folder, with speciesname is the variable part the user need to specify in listnamesformat ["Obs_XxX_1kmresolution","HS_XxX_1kmresolution"] using XxX to indicate the variable part that the function will search to align files.
+        listnamesformat (list), [Obsformat,HSformat] , example: if all files in the Observation folder are in the form Obs_speciesname_1kmresolution.tif and HS_speciesname_1kmresolution.tif for files in HS folder, with speciesname is the variable part the user need to specify in listnamesformat ["Obs_XxX_1kmresolution.tif","HS_XxX_1kmresolution.tif"] using XxX to indicate the variable part that the function will search to align files.
 
+        maxpoints (int), number of occurences point to be sampled from the total observation map to compute a network if KDE_mode = "network KDE"
+
+        listvalidHSnames (list of str), giving the names of authorized HS file to be computed, for example if the user want to run runoverfile but only on a subpart of the entire file, the user need to specify which HSfiles should be used
 
 
     Returns:
@@ -1260,7 +1272,10 @@ def runoverfile(hsfolder,obsfolder,obstaxafile,sig=30,subregionfile=None,RefRang
 
         plt.close('all') # close all figs
 
-        if os.path.exists(savefigfolder+"/continuous/"+obsfile)==False:
+        
+        if listvalidHSnames==[]:
+            listvalidHSnames = os.listdir(hsfolder)
+        if os.path.exists(savefigfolder+"/continuous/"+obsfile)==False and hsfile in listvalidHSnames:
 
             try:
                 HS = np.array(Image.open(hsfolder +"/" + hsfile))
@@ -1291,7 +1306,7 @@ def runoverfile(hsfolder,obsfolder,obstaxafile,sig=30,subregionfile=None,RefRang
                     SubRegions = np.array(Image.open(subregionfile))
                     SubRegions=SubRegions.astype("float64")
                     #SubRegions[nanmap]=0
-                    RefRange = PseudoRange(SubRegions,Obs,Obstaxa,plot=False)
+                    RefRange = PseudoRange(SubRegions,Obs,Obstaxa,plot=plot,NanMap=nanmap) # add a NanMap parameter to specify nan regions
 
                 ##### at this point we can reduce the number of points for faster computation and reducing bias in distribution details
                 print("checking for point overload before network density estimation or range estimation methods...")

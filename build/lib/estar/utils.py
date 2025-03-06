@@ -492,8 +492,8 @@ def main(array, distance_threshold,background=None,plot=True):
     print("number of components =",num_components)
     percentage= size_largest_component/Nobs*100
     print("largest component =",size_largest_component," points (",round(percentage,2),"%)")
-    #if plot==True:
-    #    plot_network(G, communities, coords,background=background)
+    if plot==True:
+        plot_network(G, communities, coords,background=background)
     return community_array,percentage,num_components
 
 
@@ -537,7 +537,8 @@ def mean_minimum_distance(array):
     return mean_min_distance
 
 
-def Pxy(Obs,background=None,plot=False,bynx=10,comp1percent=50,sigdefault=40):
+def Pxy(Obs,background=None,plot=False,bynx=10,comp1percent=50,sigdefault=40,eqObsthreshold = 0):
+    thrshd_filter = eqObsthreshold/(1+eqObsthreshold)
     commu,perc,comp=find_distance(Obs,background=background,plot=plot,bynx=bynx,comp1percent=comp1percent)
     Map=np.zeros_like(commu).astype("float64")
     for iD in np.unique(commu)[1:]:
@@ -554,8 +555,20 @@ def Pxy(Obs,background=None,plot=False,bynx=10,comp1percent=50,sigdefault=40):
             Map+=E
         else:
             print("Not enough points in community ",iD," to compute a specified distance, point considered as outlier")
-       
+    
+    if plot==True:
+        plt.figure(figsize=(10,10))
+        plt.title("Obs density before transformation")
+        if background is not None:
+            plt.imshow(background,cmap="Greys")
+        alpha=Map/np.nanmax(Map)
+        alpha[np.isnan(alpha)]=0
+        plt.imshow(Map,cmap="inferno",alpha=alpha)
+        plt.colorbar(shrink=0.7)
+
     Map = Map/(1+Map) # credibility transform
+    Map[Map<thrshd_filter]=0
+
     if plot==True:
         plt.figure(figsize=(10,10))
         if background is not None:

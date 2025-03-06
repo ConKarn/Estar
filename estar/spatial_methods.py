@@ -257,9 +257,7 @@ def LRmap(Obs, HS):
     return result
 
 
-def PseudoRange(SubRegions,Obs,Obstaxa,plot=False):
-    
-    
+def PseudoRange(SubRegions,Obs,Obstaxa,plot=False,NanMap=None):
     
     totobs_sp = np.nansum(Obs) # total obs sp
     iD_occupied_subregions = np.unique(SubRegions[Obs==1]) # iD of occupied subregions
@@ -301,11 +299,18 @@ def PseudoRange(SubRegions,Obs,Obstaxa,plot=False):
             pseudo_range[mask_subregion]= coverage*obs_anomaly
         else:
             pass
-    Totsu=threshold_otsu(pseudo_range.flatten())
+    
+    #keep only places >0 to coompute Totsu
+    maskposit = pseudo_range>0
+    # add .astype() to prevent problem later (can therefore be considered as an int16 if not enforcing float64)
+    Totsu= (threshold_otsu(pseudo_range[maskposit].flatten())).astype("float64")
     # create a plateau effect
+    print("T_otsu = ",Totsu)
     pseudo_range[pseudo_range>Totsu]=Totsu
-    pseudo_range /= np.nanmax(pseudo_range)
-
+    
+    # avoid problem here in divide by enforcing float to Totsu
+    pseudo_range = pseudo_range.astype("float64")
+    pseudo_range /= np.nanmax(pseudo_range) 
 
     if plot==True:
         plt.figure(figsize=(10,10))
@@ -313,9 +318,10 @@ def PseudoRange(SubRegions,Obs,Obstaxa,plot=False):
         plt.imshow(pseudo_range)
         plt.colorbar(shrink=0.6)
         plt.grid(linestyle="--",color="grey",linewidth=0.2)
-        #plt.show(block=False)
+        plt.show(block=False)
     
     return pseudo_range
+
 
 def Sm_Iucn(Iucn,nanmap = None,sig=50):
     
@@ -1267,7 +1273,8 @@ def runoverfile(hsfolder,obsfolder,obstaxafile,sig=30,subregionfile=None,RefRang
         plt.close('all') # close all figs
 
         
-
+        if listvalidHSnames==[]:
+            listvalidHSnames = os.listdir(hsfolder)
         if os.path.exists(savefigfolder+"/continuous/"+obsfile)==False and hsfile in listvalidHSnames:
 
             try:
@@ -1299,7 +1306,7 @@ def runoverfile(hsfolder,obsfolder,obstaxafile,sig=30,subregionfile=None,RefRang
                     SubRegions = np.array(Image.open(subregionfile))
                     SubRegions=SubRegions.astype("float64")
                     #SubRegions[nanmap]=0
-                    RefRange = PseudoRange(SubRegions,Obs,Obstaxa,plot=False)
+                    RefRange = PseudoRange(SubRegions,Obs,Obstaxa,plot=plot,NanMap=nanmap) # add a NanMap parameter to specify nan regions
 
                 ##### at this point we can reduce the number of points for faster computation and reducing bias in distribution details
                 print("checking for point overload before network density estimation or range estimation methods...")
