@@ -580,6 +580,7 @@ def Pxy(Obs,background=None,plot=False,bynx=10,comp1percent=50,sigdefault=40,eqO
     return Map
 
 
+# we want to change allign to take all sort of number of inputs, in our case, we want to allign obsfolder, hsfolder and if specified RefRangefolder
 
 def allign(obsfolder,hsfolder,listnamesformat):
     obs_example , hs_example = listnamesformat
@@ -627,6 +628,49 @@ def allign(obsfolder,hsfolder,listnamesformat):
         print("All files alligned,  1 to 1 correspondance found for all files in Obs and HS folders")
         
     return obs_ordered_index,hs_ordered_index
+
+
+# new version of allign that is able to deal with n multiple folder and align files in it
+def allign2(listfolders,listnamesformat):
+    listnames = [os.listdir(folder) for folder in listfolders]
+    # get all variable parts in order for all folders
+    list_variable_parts=[]
+    for k,format in enumerate(listnamesformat):
+        #remove suffix and preffix parts to extract variable part (species names)
+        size_preffix = format.index("XxX")
+        suffix = format[size_preffix + 3:]
+        size_suffix = len(suffix)
+        # for each file in the folder concerned create a list of variable parts
+        # we enforce "_" as a separator, so if " " appears it is changed to "_" to make it comparable across folders
+        list_variable_parts.append([ (file[size_preffix : -size_suffix]).replace(" ","_") for file in listnames[k]])
+        # we are going to produce a list of indexes to take files in the appropriate order when using functions along entire folders
+    ordered_indexes=[[] for n in range(len(listfolders))]
+    # for each variable part for the first folder, try to match a file corresponding to the variable part in other folders
+    ##########################################################################################
+    for idx_folder1, vpart in enumerate(list_variable_parts[0]):
+        # for each vpart extracted to a filename in the first folder of lsitfolders
+        #try to match another variable part in other folders
+        try:
+            # for all folders except the fisrt one in simulatneous way:
+            for folderidx, folder in enumerate(listfolders[1:]): # for all other folders except the first one
+                #print(folderidx)
+                ordered_indexes[folderidx+1].append(list_variable_parts[folderidx+1].index(vpart)) # find the idx of file that has the same variable part
+            ordered_indexes[0].append(idx_folder1) # add the idx of the varialbe part of reference from folder1
+        except Exception as error:
+            print(error)
+            print("No complete allignment found for variable part= ",vpart)
+            
+    maxfiles = max( len(list_variable_parts[k]) for k in range(len(list_variable_parts)))
+    nbfiles_with_no_allignment = maxfiles - len(ordered_indexes[0])
+
+
+    if nbfiles_with_no_allignment>0:
+        print(nbfiles_with_no_allignment, " files have no correspondance in all folders")
+    else:
+        print("All files alligned,  1 to 1 correspondance found for all files in Obs and HS folders")
+
+    return ordered_indexes
+
 
 
 

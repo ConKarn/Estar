@@ -1155,7 +1155,7 @@ def CurrRange(Obs,RefRange,HS,IucnDistSmooth,plot=False,sizecoeff=10,NanMap=None
 
 
 
-def runoverfile(hsfolder,obsfolder,obstaxafile,sig=30,subregionfile=None,RefRangeDistSmooth=50,WE=0.7,Wdens=0.7,bydeclust=40,typerange = "PseudoRange",NaNvalue=None,savefigfolder=None,outputtype="CR",plot=False,Ksig=None,bynx=10,comp1percent=50,maxpoints=10000,HStreatment="nanmin",KDE_mode="ClassicKDE + Declustering",birdmode=True,listnamesformat=[],listvalidHSnames=[]):
+def runoverfile(hsfolder,obsfolder,obstaxafile,sig=30,subregionfile=None,RefRangeDistSmooth=50,WE=0.7,Wdens=0.7,bydeclust=40,typerange = "PseudoRange",NaNvalue=None,savefigfolder=None,outputtype="CR",plot=False,Ksig=None,bynx=10,comp1percent=50,maxpoints=10000,HStreatment="nanmin",Reftreatment="nanmin",KDE_mode="ClassicKDE + Declustering",listnamesformat=[],listvalidHSnames=[]):
     
     """
 
@@ -1243,17 +1243,28 @@ def runoverfile(hsfolder,obsfolder,obstaxafile,sig=30,subregionfile=None,RefRang
     #else:
     #    listvalidSTOC=[]
 
-
-    listidxobs,listidxhs = allign(obsfolder,hsfolder,listnamesformat=listnamesformat)
+    if os.path.exists(typerange): # if a path is provided for typerange
+        listidxobs,listidxhs,listidxrefrange = allign2([obsfolder,hsfolder,typerange],listnamesformat=listnamesformat)
+        refrangenames = os.listdir(typerange) # names of the files of reference range
+    else:
+        listidxobs,listidxhs = allign2([obsfolder,hsfolder],listnamesformat =listnamesformat)
 
     hsnames=os.listdir(hsfolder)
     obsnames=os.listdir(obsfolder)
 
-    for idxobs,idxhs in zip(listidxobs,listidxhs):
-        
+    for k in range(len(listidxobs)): # get all files corresponding to the species, Obs HS and RefRange when typerange is specified as a path
+        idxobs = listidxobs[k] ; idxhs=listidxhs[k]
         obsfile = obsnames[idxobs]
         hsfile = hsnames[idxhs]
-        
+        if os.path.exists(typerange):
+            idxrefrange = listidxrefrange[k] 
+            RefRange = np.array(Image.open(typerange + "/"+ refrangenames[idxrefrange])) # extract data here !!! 
+            if Reftreatment=="nanmax":
+                RefRange[RefRange==np.nanmax(RefRange)]=0
+            if Reftreatment=="nanmin":
+                RefRange[RefRange==np.nanmin(RefRange)]=0
+            RefRange=RefRange.astype("float64")
+            RefRange/=np.nanmax(RefRange)
 
         #if os.path.exists(typerange): # if a path is provided, go inside it to find the reference range
         #        print("RefRange folder detected")
