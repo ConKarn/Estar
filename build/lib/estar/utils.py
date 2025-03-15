@@ -580,6 +580,7 @@ def Pxy(Obs,background=None,plot=False,bynx=10,comp1percent=50,sigdefault=40,eqO
     return Map
 
 
+# we want to change allign to take all sort of number of inputs, in our case, we want to allign obsfolder, hsfolder and if specified RefRangefolder
 
 def allign(obsfolder,hsfolder,listnamesformat):
     obs_example , hs_example = listnamesformat
@@ -629,10 +630,7 @@ def allign(obsfolder,hsfolder,listnamesformat):
     return obs_ordered_index,hs_ordered_index
 
 
-#####################################################################################################################################
-# Improvement of function allign
-
-
+# new version of allign that is able to deal with n multiple folder and align files in it
 def allign2(listfolders,listnamesformat):
     listnames = [os.listdir(folder) for folder in listfolders]
     # get all variable parts in order for all folders
@@ -672,6 +670,8 @@ def allign2(listfolders,listnamesformat):
         print("All files alligned,  1 to 1 correspondance found for all files in Obs and HS folders")
 
     return ordered_indexes
+
+
 
 
 
