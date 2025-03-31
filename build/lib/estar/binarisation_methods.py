@@ -75,20 +75,23 @@ def Otsuthresh(Map,Obs,NanMap=None,output="thresh", savepath=""):
     
 def Cut(Map,Obs,thresh=0.5,NanMap=None,output="thresh", savepath=""):
     Crbin = Map.copy()
-    Crbin[Crbin<thresh]=0
-    Crbin[Crbin>=thresh]=1
+    Crbincopy = Crbin.copy()
+    Crbincopy[Crbin<=1]=1
+    Crbincopy[Crbin<=(2/3)]=0.5
+    Crbincopy[Crbin<=(1/3)]=0
+    Crbin = Crbincopy
     x,y = np.where(Obs>=1)
     plt.figure(figsize=(10,10))
-    colors=['grey','lightgreen']
+    colors=['grey','darkgrey','lightgreen']
     cmap = ListedColormap(colors)
     if NanMap is not None:
         Crbin=Crbin.astype("float64")
         Crbin[NanMap]=None
     plt.imshow(Crbin,cmap=cmap)
     cbar=plt.colorbar(shrink=0.7,ticks=np.arange(len(colors)))
-    cbar.set_ticks([0, 1])
-    cbar.set_ticklabels(['Likely absence', 'Likely presence'])  # Définir les étiquettes des ticks
-    plt.scatter(y,x,c="red",s=0.1,label="Observation points")
+    cbar.set_ticks([0,0.5, 1])
+    cbar.set_ticklabels(['Likely absence','Unsure', 'Likely presence'])  # Définir les étiquettes des ticks
+    plt.scatter(y,x,c="red",s=0.01,label="Observation points",alpha=0.1)
     plt.legend()
     
     if savepath != "":

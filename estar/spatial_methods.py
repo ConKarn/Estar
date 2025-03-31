@@ -257,10 +257,49 @@ def LRmap(Obs, HS):
     return result
 
 
-def PseudoRange(SubRegions,Obs,Obstaxa,plot=False,NanMap=None):
-    
-    totobs_sp = np.nansum(Obs) # total obs sp
+def PseudoRange(SubRegions,Obs,Obstaxa=None,plot=False,NanMap=None,weighting=True,coverage_only=False):
+
     iD_occupied_subregions = np.unique(SubRegions[Obs==1]) # iD of occupied subregions
+    #####################
+    if weighting==False: # in case if we just want to consider all subregions with at least one oservation in it
+        pseudo_range=np.zeros_like(SubRegions)
+        for iD in iD_occupied_subregions:
+            mask_subregion = SubRegions == iD
+            pseudo_range[mask_subregion]=1
+        return pseudo_range.astype("float64")
+    
+    if coverage_only==True:
+        t0=Time.time()
+        pseudo_range=np.zeros_like(SubRegions)
+        iteration=0
+        for iD in iD_occupied_subregions:
+            iteration+=1
+            if Time.time()-t0>5:
+                print("iD number = ",iD, "subregion ",iteration,"/",len(iD_occupied_subregions),end=" ")
+                t0=Time.time()
+            mask_subregion = SubRegions == iD
+            n_obs = np.nansum(Obs[mask_subregion]) # total obs of the species in that subregion
+            obs_area = np.sum(mask_subregion) / n_obs # individual area attrtributed to each observation point for coverage computation
+            K=circkernel(obs_area) # circular kernel with this area
+            covmap = Obs*mask_subregion # we only keep observation inside the specified subregion
+            covmap = applykernel_pr(covmap,K) # we apply the circular kernel on each point
+            covmap = covmap>0# we keep only the area hitted by the points
+            coverage= covmap.sum() / (obs_area*n_obs) # proportion of the subregion hitted by
+            pseudo_range[mask_subregion]= coverage
+        #keep only places >0 to coompute Totsu
+        maskposit = pseudo_range>0
+        # add .astype() to prevent problem later (can therefore be considered as an int16 if not enforcing float64)
+        Totsu= (threshold_otsu(pseudo_range[maskposit].flatten())).astype("float64")
+        # create a plateau effect
+        print("T_otsu = ",Totsu)
+        pseudo_range[pseudo_range>Totsu]=Totsu
+        # avoid problem here in divide by enforcing float to Totsu
+        pseudo_range = pseudo_range.astype("float64")
+        pseudo_range /= np.nanmax(pseudo_range) 
+        return pseudo_range
+            
+    ######################
+    totobs_sp = np.nansum(Obs) # total obs sp
     Total_area_subregions =0
     totobs_taxa = 0
     iteration=0
@@ -1184,6 +1223,8 @@ def runoverfile(hsfolder,obsfolder,obstaxafile,sig=30,subregionfile=None,RefRang
 
         typerange (str) (default = "PseudoRange") : the method used for reference range reconstruction,
         > "PseudoRange" : the reconstruction use subregion selections based on sampling effort (need obstaxafile and subregionfile).
+        > "PseudoRange covonly" : if some sites are oversampled and leads to an overflow of presences by absences.
+        > "PseudoRange presonly" : select the entire subregion if at least one occurence is in the subregion.
         > "OBR": Habitat Suitability is binarised into suitable and unsuitable habitats, using Otsu thresholding (all values > otsu threshold  are considered suitble patches). All suitable patches containing occurences are noted S1. All patches of suitable habitats under a distance threshold T but with no occurences (S0 pathces) are selected alongside S1 patches to form the reference range.  For "OBR" T corresponds to the maximum of all minimum distances between pairs of occurences. 
         >"LR": same principle as "OBR" but T is chosen to be the first quartile of minimal edge to edge distances between S1 and S0 patches.
         >"MCP: Habitat Suitability is binarised into suitable and unsuitable habitat using Otsu thresholding. In each suitable patch containing more than 3 occurences, a minimum convex poygon is produced using extremal occurences as summit. The union of all polygons constitue the reference range.
@@ -1313,11 +1354,16 @@ def runoverfile(hsfolder,obsfolder,obstaxafile,sig=30,subregionfile=None,RefRang
                 
                 print("Computing range...")
 
-                if typerange=="PseudoRange": # we need the real points here, with the same bias of observations as known for the taxa of reference
+                if typerange in ["PseudoRange","PseudoRange covonly","PseudoRange presonly"]: # we need the real points here, with the same bias of observations as known for the taxa of reference
                     SubRegions = np.array(Image.open(subregionfile))
                     SubRegions=SubRegions.astype("float64")
                     #SubRegions[nanmap]=0
-                    RefRange = PseudoRange(SubRegions,Obs,Obstaxa,plot=plot,NanMap=nanmap) # add a NanMap parameter to specify nan regions
+                    if typerange == "PseudoRange":
+                        RefRange = PseudoRange(SubRegions,Obs,Obstaxa,plot=plot,NanMap=nanmap) # add a NanMap parameter to specify nan regions
+                    if typerange == "PseudoRange covonly":
+                        RefRange = PseudoRange(SubRegions,Obs,plot=plot,NanMap=nanmap,coverage_only=True)
+                    if typerange == "PseudoRange presonly":
+                        RefRange = PseudoRange(SubRegions,Obs,plot=plot,NanMap=nanmap,weighting=False)
 
                 ##### at this point we can reduce the number of points for faster computation and reducing bias in distribution details
                 print("checking for point overload before network density estimation or range estimation methods...")
