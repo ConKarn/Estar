@@ -73,12 +73,12 @@ def Otsuthresh(Map,Obs,NanMap=None,output="thresh", savepath=""):
         return Crbin
     
     
-def Cut(Map,Obs,thresh=0.5,NanMap=None,output="thresh", savepath=""):
+def Cut(Map,Obs,thresh=0.5,NanMap=None,output="thresh", savepath="",tr1=(1/10),tr2=(5/10)):
     Crbin = Map.copy()
     Crbincopy = Crbin.copy()
     Crbincopy[Crbin<=1]=1
-    Crbincopy[Crbin<=(2/3)]=0.5
-    Crbincopy[Crbin<=(1/3)]=0
+    Crbincopy[Crbin<=tr2]=0.5
+    Crbincopy[Crbin<=tr1]=0
     Crbin = Crbincopy
     x,y = np.where(Obs>=1)
     plt.figure(figsize=(10,10))

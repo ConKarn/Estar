@@ -650,16 +650,20 @@ def allign2(listfolders,listnamesformat):
     for idx_folder1, vpart in enumerate(list_variable_parts[0]):
         # for each vpart extracted to a filename in the first folder of lsitfolders
         #try to match another variable part in other folders
+        listadds=[idx_folder1] #idx to add for folders
         try:
             # for all folders except the fisrt one in simulatneous way:
             for folderidx, folder in enumerate(listfolders[1:]): # for all other folders except the first one
                 #print(folderidx)
-                ordered_indexes[folderidx+1].append(list_variable_parts[folderidx+1].index(vpart)) # find the idx of file that has the same variable part
-            ordered_indexes[0].append(idx_folder1) # add the idx of the varialbe part of reference from folder1
+                listadds.append(list_variable_parts[folderidx+1].index(vpart)) # find the idx of file that has the same variable part
         except Exception as error:
             print(error)
             print("No complete allignment found for variable part= ",vpart)
-            
+        
+        if len(listadds) == len(listfolders): # si on a bien une correspondance de vpart dans chaque folder
+            for idxfolder,add in enumerate(listadds): # on rajoute les valeurs des indices dans le ordered_indexes
+                ordered_indexes[idxfolder].append(add)
+                
     maxfiles = max( len(list_variable_parts[k]) for k in range(len(list_variable_parts)))
     nbfiles_with_no_allignment = maxfiles - len(ordered_indexes[0])
 

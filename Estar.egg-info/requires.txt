@@ -12,3 +12,5 @@ shapely
 geopandas
 networkx
 python_louvain
+igraph
+leidenalg

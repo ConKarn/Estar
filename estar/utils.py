@@ -45,6 +45,12 @@ from scipy.spatial.distance import cdist
 import community as co
 from scipy.spatial.distance import pdist
 
+from sklearn.neighbors import NearestNeighbors
+from sklearn.neighbors import radius_neighbors_graph
+import igraph
+import leidenalg
+from scipy.sparse import coo_matrix
+
 ############################################# OLD ##########################
 
 def reassign_non_continuous_regions(arrayp):
@@ -580,6 +586,93 @@ def Pxy(Obs,background=None,plot=False,bynx=10,comp1percent=50,sigdefault=40,eqO
     return Map
 
 
+def generate_density_map(Obs, resolution=0.5, max_obs = 10000, verbose=False):
+    ### Get coordinates of observation points (pixels)
+    coords = np.column_stack(np.where(Obs > 0))
+    Nobs = len(coords)
+
+    if verbose:
+        print('Generating map of nearest neighbor distance')
+        
+    ### Generate map of distance to closest neighbor
+    nn = NearestNeighbors(n_neighbors=2, metric='euclidean',algorithm='auto')  # or 'cosine', 'manhattan', etc.
+    nn.fit(coords)
+    distances, indices = nn.kneighbors(coords)
+    nn_map = np.ones_like(Obs)*np.nan
+    nn_map[(coords[:,0],coords[:,1])] = distances[:,1]
+
+    if verbose:
+        print('Computing spatial communities')
+        
+    ### Compute spatial communities
+    coords_df = pd.DataFrame(coords,columns=['row','col'])
+    
+    if len(coords)>max_obs:
+        coords_10k = np.unique(coords //10,axis=0)
+        coords_df[['row_10','col_10']]=coords //10
+    else:
+        coords_10k = coords
+        coords_df[['row_10','col_10']]=coords
+    
+    coords10_df = pd.DataFrame(coords_10k,columns=['row_10','col_10'])        
+
+    # Compute median distance
+    radius = np.nanpercentile(pdist(coords_10k, metric='euclidean'),50)
+    
+    # Create a sparse graph of neighbors within a maximum radius equel to median distance
+    A = radius_neighbors_graph(coords_10k, radius=radius, mode='distance', include_self=False)
+    A_coo = A.tocoo()
+    del A
+
+    # Create spatial graph
+    N = len(coords_10k)
+    edges = list(zip(A_coo.row, A_coo.col))
+    weights = A_coo.data.tolist()
+    G = igraph.Graph(n=N,edges=edges, directed=False)
+    G.es['weight'] = weights
+
+    del edges, weights, A_coo
+
+    # Compute communities
+    partition = leidenalg.find_partition(
+        G,
+        leidenalg.CPMVertexPartition,
+        weights='weight',                # Optional if you have edge weights
+        resolution_parameter=resolution         # Tune this!
+    )
+ 
+    coords10_df['label']=partition.membership
+    coords_df = pd.merge(coords_df,coords10_df)
+    del coords10_df, coords, coords_10k
+
+    if verbose:
+        print('Mapping spatial communities')
+        
+    community_array = np.zeros_like(Obs, dtype=int)
+    community_array[coords_df['row'].tolist(),coords_df['col'].tolist()] = coords_df['label'].values+1
+
+    del coords_df, partition, G
+
+    Map=np.zeros_like(community_array).astype("float64")
+    for iD in np.unique(community_array)[1:]:
+        print("community iD=",iD)
+        array=(community_array==iD)
+        nb_points_commu = np.nansum(array)
+        print("nb points in community iD ",iD," =",nb_points_commu)
+        if nb_points_commu !=1: # si il n'y a qu'un seul point on ne peut pas calculer de distance!
+            mind = nn_map[np.where(array)].mean()
+            print("mean minimal distance in community iD",iD,"=",mind)
+            K=gkern(sig=int(2*mind))
+            K=K/np.max(K)
+            E=applykernel(array,K)
+            Map+=E
+        else:
+            print("Not enough points in community ",iD," to compute a specified distance, point considered as outlier")
+
+    Map = Map / (1+Map)
+    return Map
+
+
 # we want to change allign to take all sort of number of inputs, in our case, we want to allign obsfolder, hsfolder and if specified RefRangefolder
 
 def allign(obsfolder,hsfolder,listnamesformat):
@@ -650,16 +743,20 @@ def allign2(listfolders,listnamesformat):
     for idx_folder1, vpart in enumerate(list_variable_parts[0]):
         # for each vpart extracted to a filename in the first folder of lsitfolders
         #try to match another variable part in other folders
+        listadds=[idx_folder1] #idx to add for folders
         try:
             # for all folders except the fisrt one in simulatneous way:
             for folderidx, folder in enumerate(listfolders[1:]): # for all other folders except the first one
                 #print(folderidx)
-                ordered_indexes[folderidx+1].append(list_variable_parts[folderidx+1].index(vpart)) # find the idx of file that has the same variable part
-            ordered_indexes[0].append(idx_folder1) # add the idx of the varialbe part of reference from folder1
+                listadds.append(list_variable_parts[folderidx+1].index(vpart)) # find the idx of file that has the same variable part
         except Exception as error:
             print(error)
             print("No complete allignment found for variable part= ",vpart)
-            
+        
+        if len(listadds) == len(listfolders): # si on a bien une correspondance de vpart dans chaque folder
+            for idxfolder,add in enumerate(listadds): # on rajoute les valeurs des indices dans le ordered_indexes
+                ordered_indexes[idxfolder].append(add)
+                
     maxfiles = max( len(list_variable_parts[k]) for k in range(len(list_variable_parts)))
     nbfiles_with_no_allignment = maxfiles - len(ordered_indexes[0])
 
@@ -670,6 +767,7 @@ def allign2(listfolders,listnamesformat):
         print("All files alligned,  1 to 1 correspondance found for all files in Obs and HS folders")
 
     return ordered_indexes
+
 
 
 

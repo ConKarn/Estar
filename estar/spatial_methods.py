@@ -1194,7 +1194,7 @@ def CurrRange(Obs,RefRange,HS,IucnDistSmooth,plot=False,sizecoeff=10,NanMap=None
 
 
 
-def runoverfile(hsfolder,obsfolder,obstaxafile,sig=30,subregionfile=None,RefRangeDistSmooth=50,WE=0.7,Wdens=0.7,bydeclust=40,typerange = "PseudoRange",NaNvalue=None,savefigfolder=None,outputtype="CR",plot=False,Ksig=None,bynx=10,comp1percent=50,maxpoints=10000,HStreatment="nanmin",Reftreatment="nanmin",KDE_mode="ClassicKDE + Declustering",listnamesformat=[],listvalidHSnames=[]):
+def runoverfile(hsfolder,obsfolder,obstaxafile,sig=30,subregionfile=None,RefRangeDistSmooth=50,WE=0.7,Wdens=0.7,bydeclust=40,typerange = "PseudoRange",NaNvalue=None,savefigfolder=None,outputtype="CR",plot=False,Ksig=None,bynx=10,comp1percent=50,maxpoints=10000,HStreatment="nanmin",Reftreatment="nanmin",KDE_mode="ClassicKDE + Declustering",listnamesformat=[],listvalidHSnames=[],tr1=1/10,tr2=5/10):
     
     """
 
@@ -1335,6 +1335,8 @@ def runoverfile(hsfolder,obsfolder,obstaxafile,sig=30,subregionfile=None,RefRang
                 print("test corespondance")
                 print("Obsfile=",obsfile)
                 print("HSfile=",hsfile)
+                if os.path.exists(typerange):
+                    print("RefRangefile=",refrangenames[idxrefrange])
                 if np.nansum(Obs<0)!=0:
                     print("negative values detected, replaced with 0")
                     Obs[Obs<0]=0
@@ -1404,7 +1406,7 @@ def runoverfile(hsfolder,obsfolder,obstaxafile,sig=30,subregionfile=None,RefRang
                 saveTIF(hsfolder +"/" + hsfile,RefRange,savefigfolder+"/spatial extent/"+obsfile[:-4]+".tif")
 
                 if KDE_mode=="network KDE":
-                    density = Pxy( Obs=reducedObs, background=HS, bynx=bynx,comp1percent=comp1percent,sigdefault=sig,plot=plot)
+                    density = generate_density_map(Obs)
                 if KDE_mode=="ClassicKDE + Declustering":
                     density= None
 
@@ -1450,7 +1452,7 @@ def runoverfile(hsfolder,obsfolder,obstaxafile,sig=30,subregionfile=None,RefRang
                     saveTIF(hsfolder +"/" + hsfile,Crbin,savefigfolder+"/"+obsfile[:-4]+"binary_otsu.tif")
 
                 if outputtype=="Cut50" or outputtype=="CR + Cut50":
-                    Crbin=Cut(Cr,Obs,NanMap=nanmap,savepath=savefigfolder+ "/plots/"+ obsfile[:-4]+"_binary50.png",output="crbin")
+                    Crbin=Cut(Cr,Obs,NanMap=nanmap,savepath=savefigfolder+ "/plots/"+ obsfile[:-4]+"_binary50.png",output="crbin",tr1=tr1,tr2=tr2)
                     binintmap = Crbin[0]*1000
                     binintmap[np.isnan(binintmap)]=-1000
                     binintmap = binintmap.astype("int32")
