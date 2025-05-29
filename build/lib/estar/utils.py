@@ -45,9 +45,18 @@ from scipy.spatial.distance import cdist
 import community as co
 from scipy.spatial.distance import pdist
 
+from sklearn.neighbors import NearestNeighbors
+from sklearn.neighbors import radius_neighbors_graph
+import igraph
+import leidenalg
+from scipy.sparse import coo_matrix
+
 ############################################# OLD ##########################
 
 def reassign_non_continuous_regions(arrayp):
+
+    """Reassign non-continuous regions in a labeled array to new labels."""
+
     array=arrayp.copy()
     unique_labels = np.unique(array)
     current_max_label = np.nanmax(unique_labels)
@@ -73,6 +82,10 @@ def reassign_non_continuous_regions(arrayp):
 
 # get a 2D array from a shpfile and reproject it using a ref file
 def project_shpfile(reftifpath,shpfile):
+
+    """
+    Rasterize a shapefile using a reference TIFF file."""
+
     # Chemin vers le fichier TIFF
     tiff_path = reftifpath
     with rasterio.open(tiff_path) as src:
@@ -94,6 +107,10 @@ def project_shpfile(reftifpath,shpfile):
 
 
 def saveTIF(reffile, array, outputfile):
+
+    """ Save a numpy array to a TIFF file using rasterio."""
+
+
     # Load reference metadata
     with rasterio.open(reffile) as ref:
         meta = ref.meta.copy()
@@ -159,6 +176,8 @@ def circkernel(A):
 
 
 def cosgkern(sig=1.,hole=False):
+
+    """ creates a cosine gaussian kernel with side length `l` and a sigma of `sig`"""
     K=np.zeros((8*int(sig)+1,8*int(sig)+1))
     ks = K.shape[0]
     mid = ks//2
@@ -171,6 +190,9 @@ def cosgkern(sig=1.,hole=False):
 
 
 def applykernel_pr(Map,Kernel): 
+        
+        """ Apply a kernel to a map, considering only the pixels with value 1 in the map."""
+
         imax,jmax = Map.shape
         ks=Kernel.shape[0]
         lx,ly = np.where(Map==1)
@@ -188,6 +210,8 @@ def applykernel_pr(Map,Kernel):
 
 
 def Beta2(x,mu,var):
+
+    """ Calculate the Beta distribution PDF for a given mean (mu) and variance (var)."""
     alpha=((mu*(1-mu))/var-1)*mu
     beta=((mu*(1-mu))/var-1)*(1-mu)
     dist = scipy.stats.beta(alpha, beta)
@@ -204,6 +228,9 @@ def ifelse(condition,resultif,resultelse):
         return resultelse
 
 def gaussian_kernel(sig):
+
+    """ Generate a Gaussian kernel with a given standard deviation (sig)."""
+
     size = int(8*sig + 1)
     K=np.zeros((size,size))
     mid=K.shape[0]//2
@@ -249,6 +276,7 @@ def get_bin_index(number, bin_edges):
 
 # Function to get the relative frequency of the bin a number falls into
 def get_relative_frequency(number, bin_edges, relative_frequencies):
+    """Given a number, bin edges, and relative frequencies, returns the relative frequency of the bin the number falls into."""
     bin_index = get_bin_index(number, bin_edges)
     if bin_index is None:
         return 0  # Number is outside the range
@@ -256,6 +284,8 @@ def get_relative_frequency(number, bin_edges, relative_frequencies):
 
 
 def genhist(L,num_bins=10):
+    """
+    Generate a histogram of the values in L with specified number of bins."""
     # Compute histogram
     counts, bin_edges = np.histogram(L, bins=num_bins, range=(min(L), max(L)), density=False)
     # Calculate relative frequencies
@@ -264,6 +294,7 @@ def genhist(L,num_bins=10):
     return bin_edges,relative_frequencies
  
 def applykernel(Map,Kernel,NanMap=None,WeightMap=None): 
+    """ Apply a kernel to a map, considering only the pixels with value 1 in the map."""
     imax,jmax = np.shape(Map)
     ks=Kernel.shape[0]
     lx,ly = np.where(Map==1)
@@ -303,6 +334,8 @@ def applykernel(Map,Kernel,NanMap=None,WeightMap=None):
 # should be in the format ; or , as separator and "." marker for decimals
 
 def lonlat2Obs(path2csv,path2ref_tif,loncolname,latcolname,spnamecolname,resolution,separator,speciesname=None):
+    """
+    Convert longitude and latitude from a CSV file to a raster array based on a reference TIFF file."""
     # Étape 1: Lire le fichier CSV avec pandas
     csv_file = path2csv  # remplace par le chemin de ton fichier CSV
     print("trying import")
@@ -436,6 +469,7 @@ def estarformat(hspath, occurencecsvfile, loncolname, latcolname, spnamecolname,
 
 # Step 1: Extract occurrence coordinates
 def get_occurrence_coordinates(array):
+    """Extract coordinates of points where the value is 1 in a 2D array."""
     return np.column_stack(np.where(array == 1))
 
 # Step 2: Build a distance-based network
@@ -452,11 +486,13 @@ def build_network(coords, distance_threshold):
 
 # Step 3: Apply Louvain algorithm
 def detect_communities(G):
+    """Detect communities in the network using the Louvain algorithm."""
     partition = co.community_louvain.best_partition(G)
     return partition
 
 # Step 4: Assign community IDs back to the 2D array
 def assign_communities_to_array(array, coords, communities):
+    """Assign community IDs to a 2D array based on the coordinates and detected communities."""
     community_array = np.zeros_like(array, dtype=int)
     for node_id, community_id in communities.items():
         coord = coords[node_id]
@@ -465,6 +501,7 @@ def assign_communities_to_array(array, coords, communities):
 
 # Step 5: Plot the network
 def plot_network(G, communities, coords,background=None):
+    """Plot the network with communities using Matplotlib."""
     pos = nx.get_node_attributes(G, 'pos')
     for e in pos:
         x,y=pos[e]
@@ -480,6 +517,8 @@ def plot_network(G, communities, coords,background=None):
 
 # Main workflow
 def main(array, distance_threshold,background=None,plot=True):
+    """
+    Main function to process the 2D array, build the network, detect communities, and plot the results."""
     Nobs=np.nansum(array>=1)
     coords = get_occurrence_coordinates(array)
     G = build_network(coords, distance_threshold)
@@ -498,6 +537,7 @@ def main(array, distance_threshold,background=None,plot=True):
 
 
 def find_50percentile(array):
+    """Find the 50th percentile of pairwise distances between points in a 2D array where the value is 1."""
     # Step 1: Extract coordinates of points where the value is 1
     points = np.argwhere(array == 1)
     # Step 2: Compute all pairwise Euclidean distances
@@ -510,6 +550,7 @@ def find_50percentile(array):
 
 
 def find_distance(Obs,background=None,plot=False,bynx=10,comp1percent=50):
+    """Find communities in a 2D array based on distance threshold and return community array, percentage of largest component, and number of components."""
     xrow,ycol = np.shape(Obs)
     distrange=np.arange(1,xrow//2,bynx)
     distance_threshold = find_50percentile(Obs)
@@ -518,6 +559,7 @@ def find_distance(Obs,background=None,plot=False,bynx=10,comp1percent=50):
     
 
 def mean_minimum_distance(array):
+    """Calculate the mean of the minimum distances between points in a 2D binary array where the value is 1."""
     # Step 1: Extract coordinates of occurrences
     coords = np.column_stack(np.where(array == 1))
     
@@ -538,6 +580,7 @@ def mean_minimum_distance(array):
 
 
 def Pxy(Obs,background=None,plot=False,bynx=10,comp1percent=50,sigdefault=40,eqObsthreshold = 0):
+    """Generate a density map based on the mean minimum distance between points in a 2D binary array where the value is 1."""
     thrshd_filter = eqObsthreshold/(1+eqObsthreshold)
     commu,perc,comp=find_distance(Obs,background=background,plot=plot,bynx=bynx,comp1percent=comp1percent)
     Map=np.zeros_like(commu).astype("float64")
@@ -580,9 +623,98 @@ def Pxy(Obs,background=None,plot=False,bynx=10,comp1percent=50,sigdefault=40,eqO
     return Map
 
 
+def generate_density_map(Obs, resolution=0.5, max_obs = 10000, verbose=False):
+    """ Generate a density map based on the nearest neighbor distance of observation points in a 2D binary array."""
+    ### Get coordinates of observation points (pixels)
+    coords = np.column_stack(np.where(Obs > 0))
+    Nobs = len(coords)
+
+    if verbose:
+        print('Generating map of nearest neighbor distance')
+        
+    ### Generate map of distance to closest neighbor
+    nn = NearestNeighbors(n_neighbors=2, metric='euclidean',algorithm='auto')  # or 'cosine', 'manhattan', etc.
+    nn.fit(coords)
+    distances, indices = nn.kneighbors(coords)
+    nn_map = np.ones_like(Obs)*np.nan
+    nn_map[(coords[:,0],coords[:,1])] = distances[:,1]
+
+    if verbose:
+        print('Computing spatial communities')
+        
+    ### Compute spatial communities
+    coords_df = pd.DataFrame(coords,columns=['row','col'])
+    
+    if len(coords)>max_obs:
+        coords_10k = np.unique(coords //10,axis=0)
+        coords_df[['row_10','col_10']]=coords //10
+    else:
+        coords_10k = coords
+        coords_df[['row_10','col_10']]=coords
+    
+    coords10_df = pd.DataFrame(coords_10k,columns=['row_10','col_10'])        
+
+    # Compute median distance
+    radius = np.nanpercentile(pdist(coords_10k, metric='euclidean'),50)
+    
+    # Create a sparse graph of neighbors within a maximum radius equel to median distance
+    A = radius_neighbors_graph(coords_10k, radius=radius, mode='distance', include_self=False)
+    A_coo = A.tocoo()
+    del A
+
+    # Create spatial graph
+    N = len(coords_10k)
+    edges = list(zip(A_coo.row, A_coo.col))
+    weights = A_coo.data.tolist()
+    G = igraph.Graph(n=N,edges=edges, directed=False)
+    G.es['weight'] = weights
+
+    del edges, weights, A_coo
+
+    # Compute communities
+    partition = leidenalg.find_partition(
+        G,
+        leidenalg.CPMVertexPartition,
+        weights='weight',                # Optional if you have edge weights
+        resolution_parameter=resolution         # Tune this!
+    )
+ 
+    coords10_df['label']=partition.membership
+    coords_df = pd.merge(coords_df,coords10_df)
+    del coords10_df, coords, coords_10k
+
+    if verbose:
+        print('Mapping spatial communities')
+        
+    community_array = np.zeros_like(Obs, dtype=int)
+    community_array[coords_df['row'].tolist(),coords_df['col'].tolist()] = coords_df['label'].values+1
+
+    del coords_df, partition, G
+
+    Map=np.zeros_like(community_array).astype("float64")
+    for iD in np.unique(community_array)[1:]:
+        print("community iD=",iD)
+        array=(community_array==iD)
+        nb_points_commu = np.nansum(array)
+        print("nb points in community iD ",iD," =",nb_points_commu)
+        if nb_points_commu !=1: # si il n'y a qu'un seul point on ne peut pas calculer de distance!
+            mind = nn_map[np.where(array)].mean()
+            print("mean minimal distance in community iD",iD,"=",mind)
+            K=gkern(sig=int(2*mind))
+            K=K/np.max(K)
+            E=applykernel(array,K)
+            Map+=E
+        else:
+            print("Not enough points in community ",iD," to compute a specified distance, point considered as outlier")
+
+    Map = Map / (1+Map)
+    return Map
+
+
 # we want to change allign to take all sort of number of inputs, in our case, we want to allign obsfolder, hsfolder and if specified RefRangefolder
 
 def allign(obsfolder,hsfolder,listnamesformat):
+    """ Align files in two folders based on a common naming format. """
     obs_example , hs_example = listnamesformat
     listobsnames = os.listdir(obsfolder)
     listhsnames = os.listdir(hsfolder)
@@ -632,6 +764,7 @@ def allign(obsfolder,hsfolder,listnamesformat):
 
 # new version of allign that is able to deal with n multiple folder and align files in it
 def allign2(listfolders,listnamesformat):
+    """ Align files in multiple folders based on a common naming format. """
     listnames = [os.listdir(folder) for folder in listfolders]
     # get all variable parts in order for all folders
     list_variable_parts=[]
@@ -674,6 +807,7 @@ def allign2(listfolders,listnamesformat):
         print("All files alligned,  1 to 1 correspondance found for all files in Obs and HS folders")
 
     return ordered_indexes
+
 
 
 

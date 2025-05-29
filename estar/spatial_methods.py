@@ -46,6 +46,9 @@ t0=Time.time()
 S=0
 
 def minimum_convex_polygon(array_2d):
+
+    '''Calculate the minimum convex polygon that encloses all points with value 1 in a 2D array.'''
+
     # Get the coordinates of points with value 1
     points = np.column_stack(np.where(array_2d == 1))
     #print(points)
@@ -67,6 +70,9 @@ def minimum_convex_polygon(array_2d):
     return mask
 
 def MCP(Obs_raw,HS):
+
+    '''Compute the minimum convex polygons for the given observations.'''
+
     Obs=Obs_raw.copy()
     Obs[Obs>=1]=1
     print(np.unique(Obs))
@@ -126,6 +132,9 @@ from scipy.spatial.distance import cdist
 from scipy.spatial import KDTree
 
 def compute_first_quartile_distance(S0, S1):
+
+    '''Calculate the first quartile of the minimum distances from points in S0 to points in S1.'''
+
     # Get coordinates of points in S0 and S1
     S0_points = np.column_stack(np.where(S0 == 1))
     S1_points = np.column_stack(np.where(S1 == 1))
@@ -143,6 +152,9 @@ def compute_first_quartile_distance(S0, S1):
 
 
 def OBRmap(Obs, HS):
+
+    '''Compute the OBR map based on observations and habitat suitability.'''
+
     # Étape 1 : Calcul de la distance maximale minimale entre les points d'observations
     print("Calcul nb Obs...")
     obs_points = np.argwhere(Obs == 1)
@@ -197,6 +209,9 @@ def OBRmap(Obs, HS):
     return result
 
 def LRmap(Obs, HS):
+
+    '''Compute the LR map based on observations and habitat suitability.'''
+
     # Étape 1 : Calcul de la distance maximale minimale entre les points d'observations
     obs_points = np.argwhere(Obs == 1)
     if len(obs_points) < 2:
@@ -258,6 +273,8 @@ def LRmap(Obs, HS):
 
 
 def PseudoRange(SubRegions,Obs,Obstaxa=None,plot=False,NanMap=None,weighting=True,coverage_only=False):
+
+    '''Compute the PseudoRange based on subregions and observations.'''
 
     iD_occupied_subregions = np.unique(SubRegions[Obs==1]) # iD of occupied subregions
     #####################
@@ -363,6 +380,8 @@ def PseudoRange(SubRegions,Obs,Obstaxa=None,plot=False,NanMap=None,weighting=Tru
 
 
 def Sm_Iucn(Iucn,nanmap = None,sig=50):
+
+    '''Smooth the IUCN map using a Gaussian kernel and apply a distance-based weighting.'''
     
     dilated_nanmap = binary_dilation(nanmap, structure=np.ones((10,10))) # used to remove borders btw seas and land
     # Calculer les gradients pour repérer les jonctions entre régions
@@ -379,6 +398,9 @@ def Sm_Iucn(Iucn,nanmap = None,sig=50):
 
 
 def circ_kernel(size=50):
+
+    '''Create a circular kernel of given size.'''
+
     S=2*size+1
     K=np.zeros((S,S))
     for i in range(S):
@@ -389,6 +411,9 @@ def circ_kernel(size=50):
 
 
 def Obs_density(Map,plot_classic=False,until_1comp=False,by=1,tmax=100,NanMap=None,sigclassic=None):
+
+    '''Compute the observation density map based on the input Map and parameters.'''
+
     dic_obs={} # dictionnary containing all points index for a given component
     continuous_regions=np.ones_like(Map)
     Map_nanremoved = Map.copy()
@@ -627,6 +652,8 @@ def Obs_density(Map,plot_classic=False,until_1comp=False,by=1,tmax=100,NanMap=No
 
 
 def EStar(Obs,RefRange,IucnDistSmooth,plot=True,NanMap=None,W_density=1.5,W_E=1,sig=None,ByComp=True,tmax=200,by=10,Refining_RefRange_with_Obs = False,WeightMap=None,KDE_mode="ClassicKDE",Ksig=None,densitymap=None):
+    
+    '''Compute the E* map based on observations, reference range, and IUCN distance smoothing.'''
     
     if KDE_mode not in ["fastKDE","ClassicKDE","ClassicKDE + Declustering","cosgkern + x/(1+x)"]:
         raise ValueError("/!\ KDE_mode should be a mode chosen in the following: fastKDE,ClassicKDE,ClassicKDE + Declusteing or cosgkern + x/(1+x) " )
