@@ -1,0 +1,1 @@
+This is an example of the folder structure permitting to use the function "runoverfile". An example script is provided to Apply the function to this example folder. In practice, It is possible to put several files in each folder, HS and Obs, to run all species in a row.
