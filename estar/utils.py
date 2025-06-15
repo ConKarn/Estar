@@ -39,7 +39,8 @@ from collections import Counter
 import random
 from shapely.geometry import Point
 from rasterio.features import rasterize
-
+import os
+import pandas as pd
 import networkx as nx
 from scipy.spatial.distance import cdist
 import community as co
@@ -51,11 +52,25 @@ import igraph
 import leidenalg
 from scipy.sparse import coo_matrix
 
-############################################# OLD ##########################
+#######################################################################################################################################################################
 
 def reassign_non_continuous_regions(arrayp):
 
-    """Reassign non-continuous regions in a labeled array to new labels."""
+    """Reassign non-continuous regions in a labeled array to new labels. Example: Ecoregions raster, has sometimes same ecoregions but separated by 
+    a non-valid space (sea), this function label again the subregions but renaming them if two same iDs are not continuous
+    
+    Input: 
+    
+    array: (2-dimensional numpy array) containing iD (integer values), labelling different regions of the map. Example: regions of "1" next to regions of "2" 
+
+    Output:
+
+    array: (2-dimensional numpy array) containing iD (integer values), labelling different regions of the map. Example: regions of "1" next to regions of "2", but
+    each region are necessary continuous. Example: two non contiguous regions of "1" are impossible, one of the region will be labelled as "3" or any other
+    value nontaken by other region.
+
+    
+    """
 
     array=arrayp.copy()
     unique_labels = np.unique(array)
@@ -80,11 +95,24 @@ def reassign_non_continuous_regions(arrayp):
     return array        
 
 
+#######################################################################################################################################################################
+
 # get a 2D array from a shpfile and reproject it using a ref file
 def project_shpfile(reftifpath,shpfile):
 
     """
-    Rasterize a shapefile using a reference TIFF file."""
+    Rasterize a shapefile using a reference TIFF file.
+    
+    Inputs:
+
+    reftifpath: (str), path to a refference .tif file to copy the projection, extent and resolution.
+    shpfile: (path to a .shp) shape file to fill the map
+
+    Output:
+
+    raster: (2-dimensional numpy array)  representing the shape file with appropriate projection extent and resolution
+    
+    """
 
     # Chemin vers le fichier TIFF
     tiff_path = reftifpath
@@ -104,11 +132,23 @@ def project_shpfile(reftifpath,shpfile):
     raster = rasterize(shapes, out_shape=out_shape, transform=reference_transform, fill=0.0, dtype='float32')
     return raster
 
-
+#######################################################################################################################################################################
 
 def saveTIF(reffile, array, outputfile):
 
-    """ Save a numpy array to a TIFF file using rasterio."""
+    """ Save a numpy array to a TIFF file using rasterio.
+    
+    Inputs:
+
+    reffile: (str), path to a refference .tif file to copy the projection, extent and resolution.
+    array: (2-dimensional numpy array), array to fill the .tif to be created
+    outputfile: (str), name and path of the .tif output.
+
+    Output:
+
+    Save a numpy array to a TIFF file using rasterio.
+    
+    """
 
 
     # Load reference metadata
@@ -137,10 +177,19 @@ def saveTIF(reffile, array, outputfile):
     with rasterio.open(outputfile, 'w', **meta) as dst:
         dst.write(data, 1)  # Write to the first band
 
+#######################################################################################################################################################################
 
 def gkern(sig=1.,hole=False):
     """\
     creates gaussian kernel with side length `l` and a sigma of `sig`
+
+    Input:
+
+    sig: (float, default = 1.) standard deviation of the Gaussian Kernel to be created
+    hole: (bool, default=False) if True: a hole is drill at the center of the gaussian kernel, used in cases where we do not want
+    an occurence density to influenced the occurence location itself.
+    
+
     """
     l=int(8*sig + 1)
     ax = np.linspace(-(l - 1) / 2., (l - 1) / 2., l)
@@ -150,7 +199,21 @@ def gkern(sig=1.,hole=False):
         kernel[kernel==np.max(kernel)]=0
     return kernel / np.sum(kernel)
 
+#######################################################################################################################################################################
+
 def circkernel(A):
+    """
+    Creates a circular kernel of specified area A, used to compute the coverage metric, itself used to compute weights in the subregions
+    in the spatial envelope generation method called PseudoRange.
+
+    Input:
+
+    A:(float) Area of the disk to be created
+
+    Output:
+
+    K: (2-dimensional numpy array), a disk of ones surronded by zeros.
+    """
     R=(A/np.pi)**(1/2)
     K=np.zeros((2*int(R)+1,2*int(R)+1))
     Ks=K.shape[0]
@@ -161,37 +224,20 @@ def circkernel(A):
                 K[x,y]=1
     return K
 
-# def applykernel(Map,Kernel): 
-#     imax,jmax = Map.shape
-#     ks=Kernel.shape[0]
-#     lx,ly = np.where(Map==1)
-#     newMap=np.zeros((imax,jmax))
-#     for x,y in zip(lx,ly):
-#         x1=max(x-ks//2,0) ; x2 = min(x+ks//2+1,imax) # ça c'est bon
-#         y1=max(y-ks//2,0) ; y2 = min(y+ks//2+1,jmax) # ça c'est bon
-#         s1=ifelse(x-ks//2<0,abs(x-ks//2),0) ; s2 = ifelse(x+ks//2 >imax-1, (ks)-(x+ks//2-imax+1),ks)
-#         r1=ifelse(y-ks//2<0,abs(y-ks//2),0) ; r2 = ifelse(y+ks//2 >jmax-1,(ks)-(y+ks//2-jmax+1),ks)
-#         newMap[x1:x2,y1:y2] += Kernel[s1:s2,r1:r2] # concerned kernel part
-#     return newMap
-
-
-def cosgkern(sig=1.,hole=False):
-
-    """ creates a cosine gaussian kernel with side length `l` and a sigma of `sig`"""
-    K=np.zeros((8*int(sig)+1,8*int(sig)+1))
-    ks = K.shape[0]
-    mid = ks//2
-    for x in range(ks):
-        for y in range(ks):
-            d= ((x-mid)**2 + (y-mid)**2)**(1/2)
-            K[x,y] = d
-    K = np.cos(K*np.pi/(4*sig))*np.exp(-K**2/(2*sig**2))
-    return K
-
+#######################################################################################################################################################################
 
 def applykernel_pr(Map,Kernel): 
         
-        """ Apply a kernel to a map, considering only the pixels with value 1 in the map."""
+        """ Apply a kernel to a map, considering only the pixels with value 1 in the map.
+        
+        Inputs:
+        
+        Map: (2-dimensional numpy array), map where the kernel would be applied on location with value 1
+        Kernel: (2-dimensional numpy array), 2 dimensional probability distribution (usually gaussian)
+
+        Output:
+        
+        """
 
         imax,jmax = Map.shape
         ks=Kernel.shape[0]
@@ -206,30 +252,42 @@ def applykernel_pr(Map,Kernel):
         return newMap
 
 
-
-
-
-def Beta2(x,mu,var):
-
-    """ Calculate the Beta distribution PDF for a given mean (mu) and variance (var)."""
-    alpha=((mu*(1-mu))/var-1)*mu
-    beta=((mu*(1-mu))/var-1)*(1-mu)
-    dist = scipy.stats.beta(alpha, beta)
-    return dist.pdf(x)
-
-# generate an exponential kernel based on Mean Dispersal Distance, return a 2D exponential kernel generated from an exponential
-# distance distribution with mean =MDD, hole paramter remove the centered pixel and its neighbors, sizecoeff is the parameter  
-# that control the size of the generated kernel, higher values for sizecoeff means generation of a larger part of the kernel
+#######################################################################################################################################################################
 
 def ifelse(condition,resultif,resultelse):
+    """
+    standard ifelse
+
+    Inputs:
+
+    condition:(bool) boolean to be tested
+
+    Output:
+
+    resultif: result to return if the condition is True
+    resultelse: result to return if the condition is False
+    """
     if condition == True:
         return resultif
     else:
         return resultelse
 
+
+#######################################################################################################################################################################
+
 def gaussian_kernel(sig):
 
-    """ Generate a Gaussian kernel with a given standard deviation (sig)."""
+    """ Generate a Gaussian kernel with a given standard deviation (sig).
+    
+    Input:
+
+    sig: (float) standard deviation (in pixels) of the gaussian kernel to be generated
+    
+    Output:
+
+    K: (2-dimensional numpy array) 2D Gaussian kernel of standard deviation sig
+    
+    """
 
     size = int(8*sig + 1)
     K=np.zeros((size,size))
@@ -240,61 +298,27 @@ def gaussian_kernel(sig):
     K[mid,mid]=0
     return K/np.nansum(K)
 
-def generate_exponential_kernel(MDD,hole=True,sizecoeff=10,size=None):
-    if size is None:
-        size = 2*(int(MDD*sizecoeff//2)) +1 # value 20 is high but we need to compute a large area to not having jump on the map due to lack of border calculation
-    mid=size // 2
-    X = np.arange(size)
-    Y = np.arange(size)
-    kernel=np.zeros((size,size))
-    for x in X:
-        for y in Y:
-            distance_squared = (x-mid)**2 + (y-mid)**2
-            kernel[x,y] = np.exp(-np.sqrt(distance_squared) * (1 / MDD))
-    if hole==True:
-        kernel[mid-1:mid+2,mid-1:mid+2]=0
-    return kernel
-
 # Estar algorithm permits to produce a ExpoScore Map based on observations and IUCN
 IUCNalone=False
 
-
-# Function to find the bin index for a given number
-def get_bin_index(number, bin_edges):
-    """
-    Given a number and bin edges, returns the index of the bin the number falls into.
-    If the number is outside the range, returns None.
-    """
-    if number < bin_edges[0] or number > bin_edges[-1]:
-        return None
-    # np.digitize returns bins in 1-based index, so we subtract 1
-    bin_index = np.digitize(number, bin_edges) - 1
-    # Handle the edge case where the number is exactly equal to the maximum edge
-    if bin_index == len(bin_edges) - 1:
-        bin_index -= 1
-    return bin_index
-
-# Function to get the relative frequency of the bin a number falls into
-def get_relative_frequency(number, bin_edges, relative_frequencies):
-    """Given a number, bin edges, and relative frequencies, returns the relative frequency of the bin the number falls into."""
-    bin_index = get_bin_index(number, bin_edges)
-    if bin_index is None:
-        return 0  # Number is outside the range
-    return relative_frequencies[bin_index]
-
-
-def genhist(L,num_bins=10):
-    """
-    Generate a histogram of the values in L with specified number of bins."""
-    # Compute histogram
-    counts, bin_edges = np.histogram(L, bins=num_bins, range=(min(L), max(L)), density=False)
-    # Calculate relative frequencies
-    total_count = len(L)
-    relative_frequencies = counts / total_count
-    return bin_edges,relative_frequencies
+#######################################################################################################################################################################
  
 def applykernel(Map,Kernel,NanMap=None,WeightMap=None): 
-    """ Apply a kernel to a map, considering only the pixels with value 1 in the map."""
+    """ Apply a kernel to a map, considering only the pixels with value 1 in the map, this function is used in PseudoRange method to compute
+    subregions weighting.
+    
+    Inputs:
+    
+    Map:(2-dimensional numpy array), usually an Obs map, with most locations with value 0, and some with value 1 where the species has been observed
+    Kernel:(2-dimensional numpy array), a kernel (2d-proability density distribution) usually created using function gkern(), to produce a 2D Gaussian kernel.
+    NanMap:(2-dimensional numpy array), a map indicating where are irrelevent terrain type (out of study extent or sea for terrestrial animals)
+    WeightMap:(2-dimensional numpy array), a map giving the weight associated to the applied kernel at each location. 
+
+    Output:
+
+    newMap:(2-dimensional numpy array), a new distribution obtained by applying the kernel to each location with value 1 in the Map input.
+    
+    """
     imax,jmax = np.shape(Map)
     ks=Kernel.shape[0]
     lx,ly = np.where(Map==1)
@@ -333,9 +357,30 @@ def applykernel(Map,Kernel,NanMap=None,WeightMap=None):
 
 # should be in the format ; or , as separator and "." marker for decimals
 
+#######################################################################################################################################################################
+
 def lonlat2Obs(path2csv,path2ref_tif,loncolname,latcolname,spnamecolname,resolution,separator,speciesname=None):
     """
-    Convert longitude and latitude from a CSV file to a raster array based on a reference TIFF file."""
+    Convert longitude and latitude from a CSV file to a raster array based on a reference TIFF file.
+    
+    Inputs:
+
+    path2csv: (str) path to .csv file containing all observations of the species, the file should contain the name of the species in one column, 
+    a column for longitude and a column for latitude.
+    path2ref_tif: (str) path to a refference file .tif raster containing all required metadata to project the occurences on a 2-dimensional array, 
+    the occurences should be extracted and projected in the same format as the reference file.
+    loncolname: (str) name of the longitude column in the .csv file
+    latcolname: (str) name of the latitude column in the .csv file
+    spnamecolname: (str) name of the species name or code column in the .csv file
+    resolution (str): number of meters represented in a pixel of the new projection (ex: 1000) if 1 pixel represents 1km x 1km square.
+    separator (str): separator used by the .csv file (ex: "," , ";" , " " or tabulation)
+    speciesname (str): if a specific name should be extracted (ex: "Acanthis_flammea")
+
+    Output:
+
+    raster_array: (2-dimensional numpy array) corresponding to the mapped occurences reported in the .csv file.
+    
+    """
     # Étape 1: Lire le fichier CSV avec pandas
     csv_file = path2csv  # remplace par le chemin de ton fichier CSV
     print("trying import")
@@ -402,14 +447,13 @@ def lonlat2Obs(path2csv,path2ref_tif,loncolname,latcolname,spnamecolname,resolut
 
 ############################## Get all input format
 
-import os
-import pandas as pd
+#######################################################################################################################################################################
 
 def estarformat(hspath, occurencecsvfile, loncolname, latcolname, spnamecolname, resolution, outputlocation,sep=","):
     """
     Fonction pour générer des rasters par espèce et les organiser dans un répertoire Estarbox.
 
-    Args:
+    Inputs:
         hspath (str): Chemin vers le dossier contenant les fichiers .tif.
         occurencecsvfile (str): Chemin vers le fichier CSV des occurrences.
         loncolname (str): Nom de la colonne des longitudes dans le CSV.
@@ -417,6 +461,11 @@ def estarformat(hspath, occurencecsvfile, loncolname, latcolname, spnamecolname,
         spnamecolname (str): Nom de la colonne contenant les noms des espèces dans le CSV.
         resolution (float): Résolution pour lonlat2Obs.
         outputlocation (str): Chemin de destination pour le répertoire "Estarbox".
+
+    Outputs:
+
+    Generate a Estar folder with Obs HS and fill information in these folders based on the CSV files given
+
     """
     # Créer le dossier Estarbox et ses sous-dossiers HS et Obs
     estarbox_dir = os.path.join(outputlocation, "Estarbox")
@@ -465,166 +514,27 @@ def estarformat(hspath, occurencecsvfile, loncolname, latcolname, spnamecolname,
 
 ############################################## DENSITY MAP LIOUVAIN NETWORK #########################################
 
-
-
-# Step 1: Extract occurrence coordinates
-def get_occurrence_coordinates(array):
-    """Extract coordinates of points where the value is 1 in a 2D array."""
-    return np.column_stack(np.where(array == 1))
-
-# Step 2: Build a distance-based network
-def build_network(coords, distance_threshold):
-    distances = cdist(coords, coords, metric='euclidean')
-    G = nx.Graph()
-    for i, coord in enumerate(coords):
-        G.add_node(i, pos=tuple(coord))
-    for i in range(len(coords)):
-        for j in range(i + 1, len(coords)):
-            if distances[i, j] <= distance_threshold:
-                G.add_edge(i, j, weight=distances[i, j])
-    return G
-
-# Step 3: Apply Louvain algorithm
-def detect_communities(G):
-    """Detect communities in the network using the Louvain algorithm."""
-    partition = co.community_louvain.best_partition(G)
-    return partition
-
-# Step 4: Assign community IDs back to the 2D array
-def assign_communities_to_array(array, coords, communities):
-    """Assign community IDs to a 2D array based on the coordinates and detected communities."""
-    community_array = np.zeros_like(array, dtype=int)
-    for node_id, community_id in communities.items():
-        coord = coords[node_id]
-        community_array[tuple(coord)] = community_id + 1  # Start community IDs from 1
-    return community_array
-
-# Step 5: Plot the network
-def plot_network(G, communities, coords,background=None):
-    """Plot the network with communities using Matplotlib."""
-    pos = nx.get_node_attributes(G, 'pos')
-    for e in pos:
-        x,y=pos[e]
-        pos[e]=(y,x)
-    node_colors = [communities[node] for node in G.nodes]
-    plt.figure(figsize=(8, 8))
-    plt.title("Distance-Based Network with Communities")
-    if background is not None:
-        plt.imshow(background,cmap="Greys")
-        plt.colorbar(shrink=0.7)
-    nx.draw(G, pos, node_color=node_colors, with_labels=False, cmap=plt.cm.Set3, node_size=10, edge_color="grey")
-    plt.show(block=False)
-
-# Main workflow
-def main(array, distance_threshold,background=None,plot=True):
-    """
-    Main function to process the 2D array, build the network, detect communities, and plot the results."""
-    Nobs=np.nansum(array>=1)
-    coords = get_occurrence_coordinates(array)
-    G = build_network(coords, distance_threshold)
-    communities = detect_communities(G)
-    community_array = assign_communities_to_array(array, coords, communities)
-    components = list(nx.connected_components(G))
-    num_components = len(components)
-    largest_component = max(components, key=len)
-    size_largest_component = len(largest_component)
-    print("number of components =",num_components)
-    percentage= size_largest_component/Nobs*100
-    print("largest component =",size_largest_component," points (",round(percentage,2),"%)")
-    if plot==True:
-        plot_network(G, communities, coords,background=background)
-    return community_array,percentage,num_components
-
-
-def find_50percentile(array):
-    """Find the 50th percentile of pairwise distances between points in a 2D array where the value is 1."""
-    # Step 1: Extract coordinates of points where the value is 1
-    points = np.argwhere(array == 1)
-    # Step 2: Compute all pairwise Euclidean distances
-    pairwise_distances = pdist(points, metric='euclidean')
-    # Step 3: Compute the 95th percentile of the distances
-    percentile_50 = np.percentile(pairwise_distances, 50)
-    print("median distance = ",percentile_50)
-    return percentile_50
-
-
-
-def find_distance(Obs,background=None,plot=False,bynx=10,comp1percent=50):
-    """Find communities in a 2D array based on distance threshold and return community array, percentage of largest component, and number of components."""
-    xrow,ycol = np.shape(Obs)
-    distrange=np.arange(1,xrow//2,bynx)
-    distance_threshold = find_50percentile(Obs)
-    community_array,percentage,num_components = main(Obs, distance_threshold,background=background,plot=plot)
-    return community_array,percentage,num_components
-    
-
-def mean_minimum_distance(array):
-    """Calculate the mean of the minimum distances between points in a 2D binary array where the value is 1."""
-    # Step 1: Extract coordinates of occurrences
-    coords = np.column_stack(np.where(array == 1))
-    
-    # If there are fewer than 2 points, return 0 (no distances to compute)
-    if len(coords) < 2:
-        return 0.0
-    
-    # Step 2: Compute pairwise distances
-    distances = cdist(coords, coords, metric='euclidean')
-    
-    # Step 3: For each point, find the minimum distance to another point (exclude self-distances)
-    np.fill_diagonal(distances, np.inf)  # Exclude self-distances by setting diagonal to infinity
-    min_distances = distances.min(axis=1)
-    
-    # Step 4: Compute the mean of the minimum distances
-    mean_min_distance = np.percentile(min_distances,50)
-    return mean_min_distance
-
-
-def Pxy(Obs,background=None,plot=False,bynx=10,comp1percent=50,sigdefault=40,eqObsthreshold = 0):
-    """Generate a density map based on the mean minimum distance between points in a 2D binary array where the value is 1."""
-    thrshd_filter = eqObsthreshold/(1+eqObsthreshold)
-    commu,perc,comp=find_distance(Obs,background=background,plot=plot,bynx=bynx,comp1percent=comp1percent)
-    Map=np.zeros_like(commu).astype("float64")
-    for iD in np.unique(commu)[1:]:
-        print("community iD=",iD)
-        array=commu==iD
-        nb_points_commu = np.nansum(array)
-        print("nb points in community iD ",iD," =",nb_points_commu)
-        if nb_points_commu !=1: # si il n'y a qu'un seul point on ne peut pas calculer de distance!
-            mind = mean_minimum_distance(array)
-            print("mean minimal distance in community iD",iD,"=",mind)
-            K=gkern(sig=int(2*mind))
-            K=K/np.max(K)
-            E=applykernel(array,K)
-            Map+=E
-        else:
-            print("Not enough points in community ",iD," to compute a specified distance, point considered as outlier")
-    
-    if plot==True:
-        plt.figure(figsize=(10,10))
-        plt.title("Obs density before transformation")
-        if background is not None:
-            plt.imshow(background,cmap="Greys")
-        alpha=Map/np.nanmax(Map)
-        alpha[np.isnan(alpha)]=0
-        plt.imshow(Map,cmap="inferno",alpha=alpha)
-        plt.colorbar(shrink=0.7)
-
-    Map = Map/(1+Map) # credibility transform
-    Map[Map<thrshd_filter]=0
-
-    if plot==True:
-        plt.figure(figsize=(10,10))
-        if background is not None:
-            plt.imshow(background,cmap="Greys")
-        alpha=Map/np.nanmax(Map)
-        alpha[np.isnan(alpha)]=0
-        plt.imshow(Map,cmap="inferno",alpha=alpha)
-        plt.colorbar(shrink=0.7)
-    return Map
-
+#######################################################################################################################################################################
 
 def generate_density_map(Obs, resolution=0.5, max_obs = 10000, verbose=False):
-    """ Generate a density map based on the nearest neighbor distance of observation points in a 2D binary array."""
+
+    """ Generate a density map based on the nearest neighbor distance of observation points in a 2D binary array, it is a Kernel Density Estimation
+    with a spatially varyinf kernel size based on local occurence density.
+    
+    Inputs:
+
+    Obs: (2-dimensional numpy array) containing 0 everywhere, except where the species has been observed (value >=1)
+    resolution: (float, default=0.5) parameter controlling the size of the detected community 
+    max_obs: (float, default=10000) resample the observations if too much obervations are present in the Obs array, 
+    permits to fasten the algorithm if it takes too long, lower max_obs if the algorithm takes too long, but increase 
+    it for better results.
+    verbose: (bool, default=False) permits to print different steps to check algorithm advancement.
+
+    Outputs:
+
+    Map: (2-diimensional numpy array) of observations density (D) but rescaled using the transformation D/(1+D).
+    
+    """
     ### Get coordinates of observation points (pixels)
     coords = np.column_stack(np.where(Obs > 0))
     Nobs = len(coords)
@@ -711,60 +621,27 @@ def generate_density_map(Obs, resolution=0.5, max_obs = 10000, verbose=False):
     return Map
 
 
-# we want to change allign to take all sort of number of inputs, in our case, we want to allign obsfolder, hsfolder and if specified RefRangefolder
-
-def allign(obsfolder,hsfolder,listnamesformat):
-    """ Align files in two folders based on a common naming format. """
-    obs_example , hs_example = listnamesformat
-    listobsnames = os.listdir(obsfolder)
-    listhsnames = os.listdir(hsfolder)
-    # get preffix sizes
-    obs_size_prefix = obs_example.index("XxX") ; hs_size_prefix = hs_example.index("XxX")
-    # get suffix
-    obs_suffix = obs_example[obs_size_prefix + 3:]  ; hs_suffix = hs_example[hs_size_prefix +3:]
-    # get suffix sizes
-    obs_size_suffix = len(obs_suffix) ; hs_size_suffix = len(hs_suffix)
-    # for both folders, get the list in order of variables parts
-    list_variable_parts=[[],[]]
-    # get all variable parts for obs
-    list_variable_parts[0] = [ obsname[obs_size_prefix : -obs_size_suffix] for obsname in listobsnames]
-    list_variable_parts[1] = [ hsname[hs_size_prefix : -hs_size_suffix] for hsname in listhsnames]
-    
-    obs_ordered_index=[]
-    hs_ordered_index=[]
-
-    # test if the variable part format corresponds "_" or " " between Genera and species names
-    #########################################################################################
-    if "_" in list_variable_parts[0][0] and " " in list_variable_parts[1][0]:
-        for k,e in enumerate(list_variable_parts[1]):
-            list_variable_parts[1][k]=e.replace(" ","_")
-
-    if " " in list_variable_parts[0][0] and "_" in list_variable_parts[1][0]:
-        for k,e in enumerate(list_variable_parts[1]):
-            list_variable_parts[1][k]=e.replace("_"," ")
-    ##########################################################################################
-
-        
-    for n,variable_part in enumerate(list_variable_parts[0]):
-        # try if a corresponding index exists
-        try:
-            hs_ordered_index.append(list_variable_parts[1].index(variable_part))
-            obs_ordered_index.append(n)
-        except Exception:
-            print("No file corresponds in HS folder for ",variable_part)
-
-    nbfiles_with_no_allignment = max(len(list_variable_parts[0]),len(list_variable_parts[1])) - len(hs_ordered_index)
-    if nbfiles_with_no_allignment>0:
-        print(nbfiles_with_no_allignment, " files have no correspondance (obs or hs missing)")
-    else:
-        print("All files alligned,  1 to 1 correspondance found for all files in Obs and HS folders")
-        
-    return obs_ordered_index,hs_ordered_index
-
+#######################################################################################################################################################################
 
 # new version of allign that is able to deal with n multiple folder and align files in it
 def allign2(listfolders,listnamesformat):
-    """ Align files in multiple folders based on a common naming format. """
+    """ Align files in multiple folders based on a common naming format. 
+
+    Inputs:
+    
+    listfolders: (list of str) list of folders containing the files to allign.
+    listnamesformat: (list of str) list of names formats that permit to allign names in different folder. The names should be in a form of a variable part
+    and a constant part permitting to allign files. As an example: if a first folder contains files names ["Acanthis_flammea_Obs.tif","Elanus caeruleus_Obs.tif"]
+    and a HS folder contains the names ["Elaneus_caeruleus_HSfile.tif","Acanthis flammea_HSfile.tif"], the common name is symbolized by "XxX", so the user should
+    write for listnamesformat in that case ["XxX_Obs.tif","XxX_HSfile.tif"].
+    
+    Outputs:
+
+    ordered_indexes: (list of list of indexes), giving in order the indexes corresponding in each folder. In our example in listnamesformat we should get: [[0,1][1,0]], 
+    since the first file in the Obs folder corresponds to the second folder in the HS folder, this is due to the common part "Acanthis_flammea"=="Acanthis flammea",
+    the function supports scientific names or other names separated by " " or "_". 
+    
+    """
     listnames = [os.listdir(folder) for folder in listfolders]
     # get all variable parts in order for all folders
     list_variable_parts=[]
@@ -809,7 +686,7 @@ def allign2(listfolders,listnamesformat):
     return ordered_indexes
 
 
-
+#######################################################################################################################################################################
 
 
 

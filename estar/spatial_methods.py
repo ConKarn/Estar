@@ -655,8 +655,8 @@ def EStar(Obs,RefRange,IucnDistSmooth,plot=True,NanMap=None,W_density=1.5,W_E=1,
     
     '''Compute the E* map based on observations, reference range, and IUCN distance smoothing.'''
     
-    if KDE_mode not in ["fastKDE","ClassicKDE","ClassicKDE + Declustering","cosgkern + x/(1+x)"]:
-        raise ValueError("/!\ KDE_mode should be a mode chosen in the following: fastKDE,ClassicKDE,ClassicKDE + Declusteing or cosgkern + x/(1+x) " )
+    if KDE_mode not in ["fastKDE","ClassicKDE","ClassicKDE + Declustering"]:
+        raise ValueError("/!\ KDE_mode should be a mode chosen in the following: fastKDE,ClassicKDE,ClassicKDE + Declusteing " )
     
     import numpy as np
     global IUCNalone
@@ -794,13 +794,6 @@ def EStar(Obs,RefRange,IucnDistSmooth,plot=True,NanMap=None,W_density=1.5,W_E=1,
 #             plt.contour(K,colors="white",linewidths=0.5)
 #             #plt.show(block=False)
         ########################
-        ##
-            if sig is not None and KDE_mode=="cosgkern + x/(1+x)":
-                K = cosgkern(sig=sig)
-                E=applykernel_pr(Map,K)
-                logobs=E
-                E[E<0]=0
-                E=E/(1+E) # normalisation interessante
                 #
         print("Observations density map")
         T0=Time.time()
@@ -1050,132 +1043,6 @@ def CurrRange(Obs,RefRange,HS,IucnDistSmooth,plot=False,sizecoeff=10,NanMap=None
         plt.contour(Estar,linewidths=0.2,linestyles='--',colors="white",levels=[level_incr*k for k in range(1,6)])
         plt.grid(linestyle="--",linewidth=0.2,color="grey")
         #plt.show(block=False)
-    if mode=="Bayes":
-        if IUCNalone==True:
-            plt.figure(figsize=(20,20))
-            CR=Estar*HS
-            plt.imshow(CR,cmap="viridis")
-            plt.colorbar()
-            plt.xlabel("X (km)")
-            plt.ylabel("Y (km)")
-            plt.title("Estimated Current Range IUCNsmoothXHS")
-            plt.scatter(yobs,xobs,c="white",s=10,alpha=0.5)
-            #plt.show(block=False)
-            return CR,logobs,Estar
-        ##############################################################################
-        ####################################FIGURES
-        if plot==True:
-            plt.figure(figsize=(20,20))
-            plt.imshow(Estar)
-            plt.colorbar()
-            plt.xlabel("X (km)")
-            plt.ylabel("Y (km)")
-            plt.title("Constraining map E*")
-            plt.scatter(yobs,xobs,c="red",s=10,alpha=0.2)
-            #plt.show(block=False)
-        ###########################################
-        ##############################################################################
-        print("Computing P(E*s|Obs)...")
-        WObs=Estar[Map==1]
-        vector_1d = WObs.flatten()
-        vector_1d = vector_1d[~np.isnan(vector_1d)]
-        print(vector_1d)
-        print(len(vector_1d))
-        ###### compute the correct number of bins
-        var=vector_1d.var()
-        mu=vector_1d.mean()
-        X=np.linspace(0.001,0.999,100)
-        Y=[Beta2(x,mu,var) for x in X]
-
-        print("Beta fit")
-        plt.figure(figsize=(10,10))
-        plt.hist(vector_1d,density=True)
-        plt.plot(X,Y,'--',color="red",label="Beta fit")
-
-
-        print("Correcting E*s|Obs/E*s desnity...")
-        maxY=0 # max ini
-        for yidx in range(len(Y)):
-            if Y[yidx]>maxY:
-                maxY=Y[yidx] # new value for max
-            if Y[yidx]<maxY:
-                Y[yidx]=maxY
-        Y=np.array(Y)
-        Y[Y>2]=2 # use to limit the range of differences between the lower weighted part and the heigher ones
-        # avoid "cropp" effects on the map and alow for more smooth wieghting
-
-        print("Beta fit")
-        plt.plot(X,Y,'--',color="orange",label="Beta fit corrected for decreased")
-        #plt.show(block=False)
-
-        bin_edges,relative_freq_Es_knw_Obs = (X,Y[1:])
-        print("bin_edges and relative_freq",bin_edges,relative_freq_Es_knw_Obs)
-
-        M=np.where(Estar>0.01) # au dessus de 0 car après la diffusion en utilisant Fourrier, on a des résidus proches de 0
-        # un peu partout ! On retire les "0" de l'histogramme pour se concentrer sur les zones en lien avec la distribution
-        # et non les zones "vides". 
-        vector_1dEs = Estar[M]
-
-    #     vector_1dEs = vector_1dEs[~np.isnan(vector_1dEs)]
-    #     bin_edges,relative_freq_Es = genhist(vector_1dEs)
-
-        WeightMap= np.zeros_like(Estar)
-        for k in range(len(bin_edges)-1):
-            less_binmap = Estar <= bin_edges[k+1]
-            more_binmap = bin_edges[k] < Estar
-            betw_binmap = more_binmap*less_binmap
-            WeightMap[betw_binmap]=relative_freq_Es_knw_Obs[k]
-
-        WeightMap[Estar > bin_edges[k+1]]=np.nanmax(WeightMap)
-
-        plt.figure()
-        plt.title("Computed Weight Map")
-        plt.imshow(WeightMap)
-        plt.colorbar()
-        #plt.show(block=False)
-    #     WeightMap = p(Estar)-p0
-        WeightMap[WeightMap<0]=0
-        CR= HS*WeightMap
-        T=Time.time()
-        CR[NanMap]=None
-
-        #NORMALISATIONNNN 
-    #     if IUCN is not None:
-    #         maxCR=np.nanpercentile(CR*Iucn_loc,97.5)
-    #         if maxCR==0:
-    #             print("Non satisfying normalization found, normalization performed using optimized Otsu treshold")
-    #             NonNan=CR*Iucn_loc
-    #             NonNan[np.isnan(NonNan)]=0
-    #             maxCR=threshold_otsu(NonNan)
-    #     else:
-    #         maxCR=np.nanpercentile(CR,97.5)
-    #         if maxCR==0:
-    #             print("Non satisfying normalization found, normalization performed using optimized Otsu treshold")
-    #             NonNan=CR.copy()
-    #             NonNan[np.isnan(NonNan)]=0
-    #             maxCR=threshold_otsu(NonNan)
-
-    #     CR[CR>maxCR]=maxCR
-    #     CR=CR/maxCR
-
-        CR = CR/np.nanmax(CR)
-          ##############################################################################
-        ####################################FIGURES
-        if plot==True:
-            plt.figure(figsize=(20,20))
-            plt.imshow(CR,cmap="viridis")
-            plt.colorbar(shrink=0.7)
-            plt.xlabel("X (km)")
-            plt.ylabel("Y (km)")
-            plt.title("Estimated Current Range P(Ps|E*s)")
-            #plt.show(block=False)
-        ###########################################
-        ##############################################################################
-        ########
-
-        T_final=Time.time()
-
-        print("Total computing time for the species",(T_final-T_initial)/60,"mn")
     
     if mode=="Permanence of ratios":
         if NanMap is not None:
