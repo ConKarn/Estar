@@ -40,6 +40,18 @@ import random
 
 
 def filter4prevalence(binary_list):
+
+    """
+    permits to select randomly inside a validation dataset, or a training dataset, the same number of positives and negatives.
+    
+    Input:
+
+    binary_list: (list) list of zeros and ones, symbolizing the succesion of positives "1" and negatives "0".
+
+    Output:
+
+    position_list: (list) list of indexes to keep inside the input list.
+    """
     #print("imput binary list =",binary_list)
     position_list = list(np.arange(0,len(binary_list),1)) 
     # Count the number of ones and zeros

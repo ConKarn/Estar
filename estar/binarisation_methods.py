@@ -42,6 +42,26 @@ import random
 
 
 def Otsuthresh(Map,Obs,NanMap=None,output="thresh", savepath=""):
+
+    """
+    This function binarised a continuous 2-dimensional numpy array and save a plot of this binarisation, usually used to binarised the output of 
+    the CurrRange function, and to save its represantation. This function use Outsu thresholding method to binarised the map.
+
+    Inputs:
+
+    Map: (2-dimensional numpy array), continuous map to be binarised.
+    Obs: (2-dimensional numpy array), map of occurences (1 if occurence, 0 if not).
+    NanMap: (2-dimensional numpy array)
+    output: (str) type of output, if output = "thresh", only the threshold used is return, if "Crbin" is used, the output is the binarised map (2-dimensional numpy array)
+    savepath: (str) path where the plot need to be saved
+
+    Output:
+
+    Crbin: (2-dimensional numpy array), output binarised map
+
+    """
+
+
     Crbin = Map.copy()
     validpoints=(Crbin[Obs>=1]).flatten()
     validpoints=validpoints[~np.isnan(validpoints)]
@@ -74,6 +94,26 @@ def Otsuthresh(Map,Obs,NanMap=None,output="thresh", savepath=""):
     
     
 def Cut(Map,Obs,thresh=0.5,NanMap=None,output="thresh", savepath="",tr1=(1/10),tr2=(5/10)):
+    """
+    This function binarised a continuous 2-dimensional numpy array and save a plot of this binarisation, usually used to binarised the output of 
+    the CurrRange function, and to save its represantation.
+
+    Inputs:
+
+    Map: (2-dimensional numpy array), continuous map to be binarised.
+    Obs: (2-dimensional numpy array), map of occurences (1 if occurence, 0 if not).
+    thresh: (float, default=0.5) if a single threshold is used, this threshold is used as a binarisation threshold.
+    NanMap: (2-dimensional numpy array)
+    output: (str) type of output, if output = "thresh", only the threshold used is return, if "Crbin" is used, the output is the binarised map (2-dimensional numpy array)
+    savepath: (str) path where the plot need to be saved
+    tr1: (float) if a trinarisation is used, the final plot will accoutn for (likely absence, uncertain, likely presence), tr1 is the beggining of the uncertain part
+    tr2: (float) upper bound of the uncertain part.
+
+    Output:
+
+    Crbin: (2-dimensional numpy array) output binarised map
+
+    """
     Crbin = Map.copy()
     Crbincopy = Crbin.copy()
     Crbincopy[Crbin<=1]=1
@@ -90,15 +130,14 @@ def Cut(Map,Obs,thresh=0.5,NanMap=None,output="thresh", savepath="",tr1=(1/10),t
     plt.imshow(Crbin,cmap=cmap)
     cbar=plt.colorbar(shrink=0.7,ticks=np.arange(len(colors)))
     cbar.set_ticks([0,0.5, 1])
-    cbar.set_ticklabels(['Likely absence','Unsure', 'Likely presence'])  # Définir les étiquettes des ticks
+    cbar.set_ticklabels(['Likely absence','Unsure', 'Likely presence'])  #Define ticks
     plt.scatter(y,x,c="red",s=0.01,label="Observation points",alpha=0.1)
     plt.legend()
     
     if savepath != "":
         print("Saving plot...")
         plt.savefig(savepath,dpi=300)
-        #plt.show(block=False)
-    ##plt.show(block=False)
+
     if output=="thresh":
         return thresh
     else:
@@ -107,6 +146,24 @@ def Cut(Map,Obs,thresh=0.5,NanMap=None,output="thresh", savepath="",tr1=(1/10),t
 
 
 def Find_focal_area(Obs,NanMap,divgrid=5,plotgrid=False):
+
+    """
+    Function used in an internal function in BoyceIndexTresh, it has for objective to divide the studied area into square subregion and count 
+    occurences in these squares
+
+    Inputs:
+
+    Obs: (2-dimensional numpy array) Map specifing where the observtions are, (1 if occurence, 0 if not)
+    NanMap: (2dimensional numpy array) Map specifying nonvalid terrain type or study boundaries (1 if not valid, 0 if valid)
+    divgrid: (int, default=5) number of lateral and vertical divisions of the study area
+    plotgrid: (bool, default=False) if True, plot a representation of the divisions made
+
+    Outputs:
+
+    Lw: (list of floats) list of weightings associated to the number of occurences in each square
+    Lextent: (list of tuples in the form (start_row,end_row,start_col,end_col)) the boundaries of each square
+    count: (list of int) number of occurences in each square
+    """
     
     count=0
     if type(divgrid)==int:
@@ -115,11 +172,7 @@ def Find_focal_area(Obs,NanMap,divgrid=5,plotgrid=False):
 
         data=Obs>=1
 
-        # Diviser le tableau en 25 morceaux et trouver le rectangle avec la somme de valeurs la plus grande
-        max_sum = float('-inf')
-        max_sum_rect = None
-
-        # Diviser les deux axes en 5 parties égales
+        # Divide the entire map into small squares
         subshape = (data.shape[0] // divgrid, data.shape[1] // divgrid)
         xobs,yobs=np.where(Obs>=1)
         N=len(xobs)
@@ -131,21 +184,19 @@ def Find_focal_area(Obs,NanMap,divgrid=5,plotgrid=False):
 
         for i in range(divgrid):
             for j in range(divgrid):
-                # Calculer les indices de début et de fin pour chaque sous-ensemble
+                # Compute starting and ending indices for each subsample
                 start_row, start_col = i * subshape[0], j * subshape[1]
                 end_row, end_col = start_row + subshape[0], start_col + subshape[1]
 
-                # Extraire le sous-ensemble de données
+                # extract subsample
                 sub_data = data[start_row:end_row, start_col:end_col]
 
-                # Calculer la somme des valeurs dans le sous-ensemble
+                # compute sum in this subsample
                 sub_sum = np.nansum(sub_data)
                 weight=np.log(1+sub_sum)
                 Lw.append(weight)
                 Lextent.append((start_row,end_row,start_col,end_col))
 
-                width=end_col-start_col
-                height=end_row-start_row
                 (y0,y1,x0,x1)=(start_row,end_row,start_col,end_col)
                 if plotgrid==True:
                     plt.plot([x0,x1,x1,x0,x0],[y0,y0,y1,y1,y0],c="tomato")
@@ -185,14 +236,28 @@ def Find_focal_area(Obs,NanMap,divgrid=5,plotgrid=False):
     return Lw,Lextent,count
 
 
-# on peut calculer Boyce sur tous les divisions de grilles avec des observations, puis pondérer les résultats par le nombre
-# d'observations dans ces grilles....
 
-#pour chaque divisiion de grille calculer Boyce Puis faire la moyenne pondérée de toutes les courbes....
+def BoyceIndexTresh(CR,Obs,NanMap,plot=False,HSxIUCN=None,save="",path=None):
 
-def BoyceIndexTresh(CR,Obs,NanMap,plot=False,plotFourier=False,HSxIUCN=None,save="",path=None,thresh_default=0.5):
-    # Maintenant que les groupes sont créés on va compter le nombre d'observations tombant dans la range estimée en fonction 
-    # de l'habitat suitability (HS) prédite, et cela en fonction de l'aire sur la carte concernant cet intervalle d'HS
+    """
+    This function permits to deduce a cutting threshold based on the distribution of occurences and the Boyce Index following the work of []
+
+    Inputs:
+
+    CR: (2-dimensional numpy array) output continuous map of the species dsitribution (values between 0-1)
+    Obs: (2-dimensional numpy array) map of occurences zeros everywhere, except where the species is observed: one
+    NanMap: (2-dimensional numpy array) map showing where the terrain is not valid (sea for terrestrial species) , 1 for sea, 0 for valid
+    plot: (bool) if True: show plots
+    HSxIUCN: (2-dimensional numpy array) optional, it permits to add a map to compare with CR
+    save: (str) name of the file to save
+    path:(str) save the output at this path
+
+    Output:
+    
+    CRbin: (2-dimensional numpy array) binarised map with the Boyce optimised threshold
+    CRthresh: (float) Boyce optimised threshold
+    
+    """
     
     Obs_c = Obs.copy()
     Obs_c[Obs_c>1]=1

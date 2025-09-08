@@ -5,7 +5,6 @@ Estar.egg-info/SOURCES.txt
 Estar.egg-info/dependency_links.txt
 Estar.egg-info/requires.txt
 Estar.egg-info/top_level.txt
-estar/Declustering.py
 estar/__init__.py
 estar/binarisation_methods.py
 estar/spatial_methods.py

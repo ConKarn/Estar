@@ -38,7 +38,6 @@ import matplotlib.pyplot as plt
 from collections import Counter
 import random
 from .utils import*
-from .Declustering import*
 from .validation_tools import*
 from .binarisation_methods import*
 
@@ -47,7 +46,15 @@ S=0
 
 def minimum_convex_polygon(array_2d):
 
-    '''Calculate the minimum convex polygon that encloses all points with value 1 in a 2D array.'''
+    '''Calculate the minimum convex polygon that encloses all points with value 1 in a 2D array.
+    
+    Inputs:
+    
+    array_2d: (2-dimensional numpy array), the observation map with 1 where occurences, and 0 everywhere alse
+    
+    Output:
+    
+    mask: (2-dimensional numpy array), the regions of 1 corresponds to the minimum convex polygon, 0 everywhere else'''
 
     # Get the coordinates of points with value 1
     points = np.column_stack(np.where(array_2d == 1))
@@ -71,7 +78,21 @@ def minimum_convex_polygon(array_2d):
 
 def MCP(Obs_raw,HS):
 
-    '''Compute the minimum convex polygons for the given observations.'''
+    '''Compute the minimum convex polygons for the given observations.
+    Same principle as the minimum_convex_polygon function but this time apply it multiple times in continuous regions of suitable habitat.
+    If the suitable habitat is divided in two non -continuous parts, two minimum convex polygons are produced, one for each suitable region.
+    This function is used to produce a spatial envelope.
+
+    Inputs:
+
+    Obs_raw: (2-dimensional numpy array) Observation map, 1: occurence, 0: no occurence
+    HS: (2-dimensional numpy array) habitat suitability map, scores between 0 and 1 telling how much a site is environmentally friendly for the species.
+
+    Output:
+
+    finalMCP: (2-dimensional numpy array) set of minimum convex polygons: 1: inside a polygon 0:outside
+    
+    '''
 
     Obs=Obs_raw.copy()
     Obs[Obs>=1]=1
@@ -133,7 +154,19 @@ from scipy.spatial import KDTree
 
 def compute_first_quartile_distance(S0, S1):
 
-    '''Calculate the first quartile of the minimum distances from points in S0 to points in S1.'''
+    '''Calculate the first quartile of the minimum distances from points in S0 to points in S1. This function is used in the 
+    Occurence Based Restriction (OBR) method to produce a spatial envelope.
+    
+    Inputs:
+    
+    S0: (2-dimensional numpy array) S0 constitutes all suitable continuous regions without occurences.
+    S1: (2-dimensional numpy array) S1 constitutes the set of pixels in a continuous suitable region that contains occurences. 
+
+    Output:
+
+    first_quartile: (float) first quartile of minimum  distances from S0 points to S1 points.
+    
+    '''
 
     # Get coordinates of points in S0 and S1
     S0_points = np.column_stack(np.where(S0 == 1))
@@ -153,43 +186,49 @@ def compute_first_quartile_distance(S0, S1):
 
 def OBRmap(Obs, HS):
 
-    '''Compute the OBR map based on observations and habitat suitability.'''
+    '''Compute the OBR map based on observations and habitat suitability. It is used to produce a spatial envelope for the focal species
+    
+    Inputs:
+    
+    Obs: (2-dimensional numpy array) Observation map, 1: occurence, 0: no occurence
+    HS: (2-dimensional numpy array) habitat suitability map, scores between 0 and 1 telling how much a site is environmentally friendly for the species.
 
-    # Étape 1 : Calcul de la distance maximale minimale entre les points d'observations
-    print("Calcul nb Obs...")
+    Output:
+
+    result: (2-dimensional numpy array) set of locations inside the spatial envelope based on OBR method.
+    
+    '''
+    # Step1: Calculate maximal minimal distance between observations points
+    print("Compute Obs number...")
     obs_points = np.argwhere(Obs == 1)
     if len(obs_points) < 2:
-        raise ValueError("Il doit y avoir au moins deux points d'observation pour calculer T.")
+        raise ValueError("We need at least 2 observations to compute T.")
     print("Computing pairwise distances")
     # Calcul des distances entre tous les points d'observation
     distances = cdist(obs_points, obs_points)
-    np.fill_diagonal(distances, np.inf)  # Ignorer la distance de chaque point avec lui-même
+    np.fill_diagonal(distances, np.inf)  # Ignore self distance to point
     print("finding maximal minimal distance...")
-    T = np.min(distances, axis=1).max()  # Plus grande distance minimale
+    T = np.min(distances, axis=1).max()  #Larger minimal distance
     print("T=",T)
-    # Étape 2 : Seuil d'Otsu pour binariser HS en fonction des valeurs aux points d'observations
+    # Step2: Otsu thresholding to binarised based on HS values at points
     hs_values_at_obs = HS[Obs == 1]
     threshold = threshold_otsu(hs_values_at_obs)
     print("Otsu threshold=",threshold)
     HS_binary = (HS > threshold).astype(int)
     plt.figure()
     plt.imshow(HS_binary,cmap="binary")
-    #plt.show(block=False)
-    # Étape 3 : Identification des régions continues de "1" (S1 et S0)
+    #Step3: Identifying S1 and S0 regions
     labeled_HS, num_features = label(HS_binary)
     
-    # Déterminer les régions contenant des observations (S1)
-    S1_regions = set(labeled_HS[Obs == 1]) - {0}  # 0 représente l'arrière-plan
-    
-    # Générer la carte binaire pour les régions contenant des observations (S1)
+    # Determine S1 regions
+    S1_regions = set(labeled_HS[Obs == 1]) - {0}  # 0 for background
     S1_mask = np.isin(labeled_HS, list(S1_regions)).astype(int)
     
     plt.figure()
     plt.title("S1 Regions")
     plt.imshow(S1_mask,cmap="binary")
-    #plt.show(block=False)
     
-    # Étape 4 : Identification des régions S0 proches des régions S1
+    # Step4: Identify S0 regions (suitable regions close from S1)
     print("Compute S0 regions...")
     distance_to_S1 = distance_transform_edt(1 - S1_mask)
     S0_mask = ((distance_to_S1 > 0) & (distance_to_S1 <= T) & (HS_binary == 1)).astype(int)
@@ -197,14 +236,12 @@ def OBRmap(Obs, HS):
     plt.figure()
     plt.title("All S0 Regions")
     plt.imshow(S0_mask,cmap="binary")
-    #plt.show(block=False)
     
     result = (S1_mask | S0_mask).astype(int)
     
     plt.figure()
     plt.title("OBR selection")
     plt.imshow(result,cmap="binary")
-    #plt.show(block=False)
 
     return result
 
@@ -926,11 +963,11 @@ def EStar(Obs,RefRange,IucnDistSmooth,plot=True,NanMap=None,W_density=1.5,W_E=1,
 
 ###### 
 
-def CurrRange(Obs,RefRange,HS,IucnDistSmooth,plot=False,sizecoeff=10,NanMap=None,plotFourier=False,W_density=1,W_E=0.5,sig=10,tmax=200,by=10,ByComp=False,Refining_RefRange_with_Obs = False,mode="Permanence of ratios", Declustering = True,by_declust=5,KDE_mode="ClassicKDE + Declustering",Ksig=None,densitymap=None):
+def CurrRange(Obs,RefRange,HS,IucnDistSmooth,plot=False,sizecoeff=10,NanMap=None,W_density=1,W_E=0.5,sig=10,tmax=200,by=10,ByComp=False,Refining_RefRange_with_Obs = False,mode="Permanence of ratios", Declustering = True,by_declust=5,KDE_mode="ClassicKDE + Declustering",Ksig=None,densitymap=None):
     
     """
 
-    CurrRange(Obs,RefRange,HS,IucnDistSmooth,plot=False,sizecoeff=10,NanMap=None,plotFourier=False,W_density=1,W_E=0.5,sig=10,tmax=200,by=10,ByComp=False,Refining_RefRange_with_Obs = False,mode="Permanence of ratios", Declustering = True,by_declust=5,KDE_mode="ClassicKDE + Declustering")
+    CurrRange(Obs,RefRange,HS,IucnDistSmooth,plot=False,sizecoeff=10,NanMap=None,W_density=1,W_E=0.5,sig=10,tmax=200,by=10,ByComp=False,Refining_RefRange_with_Obs = False,mode="Permanence of ratios", Declustering = True,by_declust=5,KDE_mode="ClassicKDE + Declustering")
 
     CurrRange is a function that compute an estimated realised range of a species based on Environemental indicators in the form of an Habitat Suitability map, and spatial constraints in a form of a reference range or a reconstructed range extent. CurrRange uses Permanence of Ratios to incorporate both information together.
 
@@ -1026,14 +1063,9 @@ def CurrRange(Obs,RefRange,HS,IucnDistSmooth,plot=False,sizecoeff=10,NanMap=None
     else:
         Iucn_loc=None
     
-    if KDE_mode == "ClassicKDE + Declustering" and densitymap is None:
-        print("#################")
-        print("Debiaising non uniform sampling by Cell Declustering...")
-        print("#################")
-        WeightMap = celld(Obs=Map,NanMap=NanMap,sig=sig,gridcellsize=10,plotgrid=True,mode="diagnose",listdivgrids=None,background=Hs,by_declust=by_declust,plot=plot,Ksig=Ksig)
-    else:
-        WeightMap = None
-    Estar,logobs=EStar(Map,Iucn_loc,IucnDistSmooth,NanMap=NanMap,plot=plotFourier,W_density=W_density,W_E=W_E, ByComp = ByComp , sig=sig,tmax=tmax,by=by,Refining_RefRange_with_Obs =Refining_RefRange_with_Obs,WeightMap=WeightMap,KDE_mode=KDE_mode,Ksig=Ksig,densitymap=densitymap)
+    
+    WeightMap = None
+    Estar,logobs=EStar(Map,Iucn_loc,IucnDistSmooth,NanMap=NanMap,W_density=W_density,W_E=W_E, ByComp = ByComp , sig=sig,tmax=tmax,by=by,Refining_RefRange_with_Obs =Refining_RefRange_with_Obs,WeightMap=WeightMap,KDE_mode=KDE_mode,Ksig=Ksig,densitymap=densitymap)
     if plot==True:
         plt.figure(figsize=(10,10))
         plt.title("Output from Estar function (Rep)")
@@ -1088,7 +1120,7 @@ def CurrRange(Obs,RefRange,HS,IucnDistSmooth,plot=False,sizecoeff=10,NanMap=None
 
 
 
-def runoverfile(hsfolder,obsfolder,obstaxafile,sig=30,subregionfile=None,RefRangeDistSmooth=50,WE=0.7,Wdens=0.7,bydeclust=40,typerange = "PseudoRange",NaNvalue=None,savefigfolder=None,outputtype="CR",plot=False,Ksig=None,bynx=10,comp1percent=50,maxpoints=10000,HStreatment="nanmin",Reftreatment="nanmin",KDE_mode="ClassicKDE + Declustering",listnamesformat=[],listvalidHSnames=[],tr1=1/10,tr2=5/10):
+def runoverfile(hsfolder,obsfolder,obstaxafile,sig=30,subregionfile=None,RefRangeDistSmooth=50,WE=0.7,Wdens=0.7,bydeclust=40,typerange = "PseudoRange",savefigfolder=None,outputtype="CR",plot=False,Ksig=None,maxpoints=10000,HStreatment="nanmin",Reftreatment="nanmin",KDE_mode="ClassicKDE + Declustering",listnamesformat=[],listvalidHSnames=[],tr1=1/3,tr2=2/3):
     
     """
 
@@ -1101,13 +1133,13 @@ def runoverfile(hsfolder,obsfolder,obstaxafile,sig=30,subregionfile=None,RefRang
 
         obsfolder (str) (mandatory): the path of the folder containing the observation raster files (tif or tiff format). For each raster, occurences should be displaying the number of observation in the pixel, all other pixels set at 0.
 
-        obstaxafile (str) (Only if typerange = "PseudoRange"): the path to the file (tif or tiff format) corresponding to a unique raster following the same principle as files in obsfolder. obstaxafile corresponds to all occurences of a reference taxa. This input serves the purpose of accounting to non uniform Sampling Effort over your study area.
+        obstaxafile (str) (Only if typerange = "PseudoRange"): the path to the file (tif or tiff format) corresponding to a unique raster following the same principle as files in obsfolder. obstaxafile corresponds to all occurences of a reference taxa. This input serves the purpose of accounting to non uniform Sampling Effort over your study area. If the focal species is a bird fo instance, one can use all bird species occurences as a taxa reference.
 
         sig (int) (default = 30): the standard deviation of the 2 dimensional gaussian kernel used to reconstruct an occurence density. sig constitute an important parameter, in a European scale, usually sig is around 30km but it can change your result. Be sure to check visually on simple examples to best choose this parameter. Adjust the parameter util occurences likely to be part of the same range continuum lie in the same patch. At European scale, around 30 km.
 
-        subregionfile (str) (if rangetype = "PseudoRange"): a raster file (tif or tiff) with partition of the study area into meaningful divisions for the species (if an occurence is inside a subregion, the species is likely to be part of the whole subregion). Values corresponds to arbitrary iD in a form of integer values.
+        subregionfile (str) (if rangetype = "PseudoRange"): a raster file (tif or tiff) with partition of the study area into meaningful divisions for the species (if an occurence is inside a subregion, the species is likely to be part of the whole subregion). Values corresponds to arbitrary iD in a form of integer values. We expect for instance, regions of ones regions on twos etc...
 
-        RefRangeDistSmooth (int) (default = 50): standard deviation of the 2 dimensional gaussian kernel used to smooth the spatial constraint before Permanence of Ratios incorporation. It could be usefull in the case where if typerange = "PseudoRange", to smooth transition between computed subregions weighs. This will avoid abrupt transition in the output. At Euopean scale usually 50 km.
+        RefRangeDistSmooth (int) (default = 50): standard deviation of the 2 dimensional gaussian kernel used to smooth the spatial constraint before Permanence of Ratios incorporation. It could be usefull in the case where if typerange = "PseudoRange", to smooth transition between computed subregions weights. This will avoid abrupt transition in the output. At Euopean scale usually 50 km.
 
         WE (float) = weighting coefficient given to the reference range part (E) compared to the reconstructed occurence density (dens) part. P(site part of the realised range | x,y) = I( WE*E + Wdens*dens), where I is a cutting function that sent all values greater than 1 to 1. WE and Wdens are real values. As an example, WE=0.7, Wdens=0.7, means that both E and dens should be high to reach the maximum confidence of 1. If the density is at its maximum and E=0 (the site is not part of the reference range), the maximum value attainable is 0.7. (for futher information see article)
 
@@ -1333,7 +1365,7 @@ def runoverfile(hsfolder,obsfolder,obstaxafile,sig=30,subregionfile=None,RefRang
                 
                 if outputtype=="Binary Boyce" or outputtype=="CR + Binary Boyce":
                     print("Binarisation using Boyce index")
-                    Crbin=BoyceIndexTresh(Cr,Obs,NanMap=nanmap,plot=plot,plotFourier=False,HSxIUCN=None,save=obsfile+"output.png",path=savefigfolder,thresh_default=0.5)
+                    Crbin=BoyceIndexTresh(Cr,Obs,NanMap=nanmap,plot=plot,HSxIUCN=None,save=obsfile+"output.png",path=savefigfolder)
                     print("Values between 0 and 1: encoded with integers between 0 and 1000. Divide by 1000 to retrive initial values")
                     print("Convert output into integers map for efficient memory usage, NaN values are set to -1000")
                     binintmap = Crbin[0]*1000
